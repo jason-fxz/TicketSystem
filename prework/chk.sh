@@ -4,8 +4,8 @@
 
 echo "compiling"
 g++ make.cpp -o mk.out -Wall -fsanitize=undefined -O2
-g++ BPlusTree.cpp -o tst.out -Wall -fsanitize=undefined -O2
-g++ database.cpp -o std.out -Wall -fsanitize=undefined -O2
+g++ BPlusTree.cpp -o tst.out -Wall -Wextra -std=c++20 -fsanitize=address -fsanitize=undefined -O2
+g++ database.cpp -o std.out -Wall -fsanitize=undefined,address
 echo "compiled"
 
 for ((i=1;;i++))

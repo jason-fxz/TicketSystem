@@ -1,28 +1,17 @@
 #include <climits>
 #include <cstddef>
-#include <cstdint>
 #include <cstdlib>
 #include <ctime>
 #include <cstring>
 #include <fstream>
 #include <iostream>
-#include <ostream>
-#include <string>
 #include <vector>
-#include <cassert>
-#include <algorithm>
-
 using namespace std;
+
 
 template <class Tp>
 int Camp(const Tp &x, const Tp &y) {
     return x < y ? -1 : (x == y ? 0 : 1);
-}
-
-template<class Tp1, class Tp2>
-ostream &operator<<(ostream &os, const pair<Tp1, Tp2> &p) {
-    os << "(" << p.first << ", " << p.second << ")";
-    return os;
 }
 
 template <size_t len>
@@ -179,15 +168,17 @@ class File {
 };
 
 
+
+
 // B+ Tree database, Every Key should be unique!!
-template < typename Key, typename Tp, size_t M, size_t L,
-           size_t MAX_CACHE_SIZE = 40,
-           size_t MAX_NODE_SIZE = M,
-           size_t MIN_NODE_SIZE = (M + 1) / 2,
-           size_t MAX_LEAF_SIZE = L,
-           size_t MIN_LEAF_SIZE = (L + 1) / 2 >
+template <typename Key, typename Tp, size_t M, size_t L>
 class BPlusTree {
-    using Data_t = Tp;
+#define MAX_NODE_SIZE (M)
+#define MIN_NODE_SIZE ((M + 1) / 2)
+#define MAX_LEAF_SIZE (L)
+#define MIN_LEAF_SIZE ((L + 1) / 2)
+#define MAX_CACHE_SIZE 40
+    using Data_t = std::pair<Tp, bool>;
     using Key_t = Key;
     struct node {
         int count; // count of children
@@ -204,17 +195,46 @@ class BPlusTree {
         bool operator==(const node &rhs) const {
             return index == rhs.index;
         }
+        // virtual void print() {
+        //     cerr << "index " << index << " count " << count << endl;
+        // }
+        // virtual Key_t get_minkey() const = 0;
+        // virtual ~node() {};
     };
 
     struct inner_node : node {
         Key_t key[MAX_NODE_SIZE - 1];
         int child[MAX_NODE_SIZE];
+        // virtual Key_t get_minkey() const override {
+        //     return key[0];
+        // }
+        // virtual ~inner_node() {};
+        // virtual void print() override {
+        //     node::print();
+        //     cerr << child[0] << " ";
+        //     for (int i = 1; i < node::count - 1; ++i) {
+        //         cerr << "[" << key[i - 1] << "] " << child[i] << " ";
+        //     }
+        //     cerr << endl;
+        // }
+
     };
 
     struct leaf_node : node {
         Key_t key[MAX_LEAF_SIZE];
         Data_t data[MAX_LEAF_SIZE];
         int next;
+        // virtual Key_t get_minkey() const override {
+        //     return key[0];
+        // }
+        // // virtual ~leaf_node() {};
+        // virtual void print() override {
+        //     node::print();
+        //     for (int i = 0; i < node::count; ++i) {
+        //         cerr << "[" << key[i] << "] " << data[i].first << "(" << data[i].second << ") ";
+        //     }
+        //     cerr << endl;
+        // }
     };
 
     int m_size; // size of the tree (number of the data)
@@ -326,19 +346,6 @@ class BPlusTree {
         return cache[pos];
     }
 
-    void remove_node(node *p) {
-        // do something recycle the node
-        // TODO: recycle the node
-        for (int i = 0; i < MAX_CACHE_SIZE; ++i) {
-            if (cache[i] == p) {
-                if (cache[i]->is_inner()) delete static_cast<inner_node *>(cache[i]);
-                else delete static_cast<leaf_node *>(cache[i]);
-                cache[i] = nullptr;
-                return;
-            }
-        }
-    }
-
     void write_node(node *p) {
         if (p->is_inner()) {
             // cerr  << "write inner node " << p->get_index() << endl;
@@ -387,8 +394,7 @@ class BPlusTree {
             leaf_node *new_leaf = static_cast<leaf_node *>(new_node(false));
             new_leaf->next = leaf->next;
             leaf->next = new_leaf->index;
-            if (Camp(key, leaf->key[MIN_LEAF_SIZE - 1]) <=
-                0) { // key <= leaf->key[MIN_LEAF_SIZE - 1]
+            if (Camp(key, leaf->key[MIN_LEAF_SIZE - 1]) <= 0) { // key <= leaf->key[MIN_LEAF_SIZE - 1]
                 // insert key to the left node (leaf)
                 for (int i = 0; i < MAX_LEAF_SIZE + 1 - MIN_LEAF_SIZE; ++i) {
                     new_leaf->key[i] = leaf->key[i + MIN_LEAF_SIZE - 1];
@@ -457,175 +463,10 @@ class BPlusTree {
             // upload_key = new_inner->key[0];
         }
     }
-
-    bool leaf_merge_or_borrow(leaf_node *leaf, inner_node *father, int pos) {
-        bool borrow = false;
-        leaf_node *left_bro = nullptr, *right_bro = nullptr;
-        if (pos > 0) { // try left
-            left_bro = static_cast<leaf_node *>(get_node(father->child[pos - 1]));
-            if (left_bro->count > MIN_LEAF_SIZE) {
-                borrow = true;
-            }
-        }
-        if (!borrow && pos + 1 < father->count) { // try right
-            right_bro = static_cast<leaf_node *>(get_node(father->child[pos + 1]));
-            if (right_bro->count > MIN_LEAF_SIZE) {
-                left_bro = nullptr;
-                borrow = true;
-            }
-        }
-        if (borrow) { // borrow
-            if (left_bro) { // borrow from left bother
-                for (int i = leaf->count; i > 0; --i) {
-                    leaf->key[i] = leaf->key[i - 1];
-                    leaf->data[i] = leaf->data[i - 1];
-                }
-                leaf->key[0] = left_bro->key[left_bro->count - 1];
-                leaf->data[0] = left_bro->data[left_bro->count - 1];
-                ++leaf->count;
-                --left_bro->count;
-                father->key[pos - 1] = leaf->key[0];
-            } else { // borrow from right bother
-                leaf->key[leaf->count] = right_bro->key[0];
-                leaf->data[leaf->count] = right_bro->data[0];
-                ++leaf->count;
-                --right_bro->count;
-                for (int i = 0; i < right_bro->count; ++i) {
-                    right_bro->key[i] = right_bro->key[i + 1];
-                    right_bro->data[i] = right_bro->data[i + 1];
-                }
-                father->key[pos] = right_bro->key[0];
-            }
-        } else { // merge
-            if (left_bro) { // merge with left brother
-                for (int i = 0; i < leaf->count; ++i) {
-                    left_bro->key[left_bro->count + i] = leaf->key[i];
-                    left_bro->data[left_bro->count + i] = leaf->data[i];
-                }
-                left_bro->count += leaf->count;
-                left_bro->next = leaf->next;
-                remove_node(leaf);
-                for (int i = pos; i < father->count - 1; ++i) {
-                    father->key[i - 1] = father->key[i];
-                    father->child[i] = father->child[i + 1];
-                }
-                --father->count;
-            } else { // merge with right brother
-                for (int i = 0; i < right_bro->count; ++i) {
-                    leaf->key[leaf->count + i] = right_bro->key[i];
-                    leaf->data[leaf->count + i] = right_bro->data[i];
-                }
-                leaf->count += right_bro->count;
-                leaf->next = right_bro->next;
-                remove_node(right_bro);
-                for (int i = pos + 1; i < father->count - 1; ++i) {
-                    father->key[i - 1] = father->key[i];
-                    father->child[i] = father->child[i + 1];
-                }
-                --father->count;
-            }
-        }
-        return borrow;
-    }
-
-    bool inner_merge_or_borrow(inner_node *inner, inner_node *father, int pos) {
-        bool borrow = false;
-        inner_node *left_bro = nullptr, *right_bro = nullptr;
-        if (pos > 0) { // try left
-            left_bro = static_cast<inner_node *>(get_node(father->child[pos - 1]));
-            if (left_bro->count > MIN_LEAF_SIZE) {
-                borrow = true;
-            }
-        }
-        if (!borrow && pos + 1 < father->count) { // try right
-            right_bro = static_cast<inner_node *>(get_node(father->child[pos + 1]));
-            if (right_bro->count > MIN_LEAF_SIZE) {
-                left_bro = nullptr;
-                borrow = true;
-            }
-        }
-        if (borrow) {
-            if (left_bro) { // borrow from left bother
-                for (int i = inner->count; i > 0; --i) {
-                    if (i > 1) inner->key[i - 1] = inner->key[i - 2];
-                    inner->child[i] = inner->child[i - 1];
-                }
-                inner->key[0] = father->key[pos - 1];
-                inner->child[0] = left_bro->child[left_bro->count - 1];
-                father->key[pos - 1] = left_bro->key[left_bro->count - 2];
-                ++inner->count;
-                --left_bro->count;
-            } else { // borrow from right bother
-                inner->key[inner->count - 1] = father->key[pos];
-                inner->child[inner->count] = right_bro->child[0];
-                father->key[pos] = right_bro->key[0];
-                ++inner->count;
-                --right_bro->count;
-                for (int i = 0; i < right_bro->count; ++i) {
-                    if (i + 1 < right_bro->count) right_bro->key[i] = right_bro->key[i + 1];
-                    right_bro->child[i] = right_bro->child[i + 1];
-                }
-            }
-        } else {
-            if (left_bro) { // merge with left brother
-                left_bro->key[left_bro->count - 1] = father->key[pos - 1];
-                left_bro->child[left_bro->count] = inner->child[0];
-                for (int i = 1; i < inner->count; ++i) {
-                    left_bro->key[left_bro->count + i - 1] = inner->key[i - 1];
-                    left_bro->child[left_bro->count + i] = inner->child[i];
-                }
-                left_bro->count += inner->count;
-                remove_node(inner);
-                for (int i = pos; i < father->count - 1; ++i) {
-                    father->key[i - 1] = father->key[i];
-                    father->child[i] = father->child[i + 1];
-                }
-                --father->count;
-            } else { // merge with right brother
-                inner->key[inner->count - 1] = father->key[pos];
-                inner->child[inner->count] = right_bro->child[0];
-                for (int i = 1; i < right_bro->count; ++i) {
-                    inner->key[inner->count + i - 1] = right_bro->key[i - 1];
-                    inner->child[inner->count + i] = right_bro->child[i];
-                }
-                inner->count += right_bro->count;
-                remove_node(right_bro);
-                for (int i = pos + 1; i < father->count - 1; ++i) {
-                    father->key[i - 1] = father->key[i];
-                    father->child[i] = father->child[i + 1];
-                }
-                --father->count;
-            }
-        }
-        return borrow;
-    }
-
-    void print_node(int cur_index) {
-        node *cur = get_node(cur_index);
-        if (cur->is_inner()) {
-            // if (cur_index != m_root) assert(cur->count >= MIN_NODE_SIZE);
-            inner_node &x = *static_cast<inner_node *>(cur);
-            cerr << "inner{ " << x.index << ", " << x.count << ": " << x.child[0] << " ";
-            for (int i = 1; i < x.count; ++i) {
-                cerr << "[" << x.key[i - 1] << "] " << x.child[i] << " ";
-            }
-            cerr << "}" << endl;
-            for (int i = 0; i < x.count; ++i) {
-                print_node(x.child[i]);
-            }
-        } else {
-            // if (cur_index != m_root) assert(cur->count >= MIN_LEAF_SIZE);
-            leaf_node &x = *static_cast<leaf_node *>(cur);
-            cerr << "leaf{ " << x.index << ", " << x.count << ": ";
-            for (int i = 0; i < x.count; ++i) {
-                cerr << "[" << x.key[i] << "] " << x.data[i] << " ";
-            }
-            cerr << "}" << endl;
-        }
-    }
-
   public:
     void insert(const Key_t &key, const Data_t &data) {
+        // cerr << "insert " << key << " " << data << endl;
+        // cerr << "root " << root << " size " << size << endl;
         if (m_size == 0) {
             leaf_node *cur = static_cast<leaf_node *>(new_node(false));
             m_root = cur->index;
@@ -634,6 +475,7 @@ class BPlusTree {
             cur->key[0] = key;
             cur->data[0] = data;
             cur->next = 0;
+            ++m_size;
             return;
         }
         ++m_size;
@@ -665,20 +507,22 @@ class BPlusTree {
             new_root->child[0] = m_root;
             new_root->child[1] = index;
             m_root = new_root->index;
+            // cerr << "change root to " << root << endl;
         }
     }
 
     void search(const Key_t &key_L, const Key_t &key_R, std::vector<Tp> &res) {
+        // cerr << "search " << key << endl;
         if (m_size == 0) return;
         node *cur = get_node(m_root);
         while (cur->is_inner()) {
             int i = 0;
-            while (i < cur->count - 1
-                   && Camp(static_cast<inner_node *>(cur)->key[i], key_L) <= 0) ++i;
+            while (i < cur->count - 1 && Camp(static_cast<inner_node *>(cur)->key[i], key_L) <= 0) ++i;
             cur = get_node(static_cast<inner_node *>(cur)->child[i]);
         }
         leaf_node *leaf = static_cast<leaf_node *>(cur);
         while (true) {
+            // cerr << "fuck" << std::endl;
             if (Camp(leaf->key[leaf->count - 1], key_L) < 0) {
                 if (leaf->next == 0) break;
                 leaf = static_cast<leaf_node *>(get_node(leaf->next));
@@ -687,7 +531,7 @@ class BPlusTree {
             int i = 0;
             while (i < leaf->count && Camp(leaf->key[i], key_L) < 0) ++i;
             while (i < leaf->count && Camp(leaf->key[i], key_R) <= 0) {
-                res.push_back(leaf->data[i]);
+                if (leaf->data[i].second) res.push_back(leaf->data[i].first);
                 ++i;
             }
             if (i == leaf->count && leaf->next != 0) {
@@ -699,71 +543,60 @@ class BPlusTree {
         sort(res.begin(), res.end());
     }
 
-    void remove(const Key_t &key) {
+    void naive_remove(const Key_t &key) {
         if (m_size == 0) return;
-        std::vector<std::pair<int, int>> path; // path from root to leaf <index, pos>
         node *cur = get_node(m_root);
         while (cur->is_inner()) {
             int i = 0;
-            while (i < cur->count - 1
-                   && Camp(static_cast<inner_node *>(cur)->key[i], key) <= 0)
-                ++i;
-            path.push_back({cur->index, i});
+            while (i < cur->count - 1 && Camp(static_cast<inner_node *>(cur)->key[i], key) < 0) ++i;
             cur = get_node(static_cast<inner_node *>(cur)->child[i]);
         }
         leaf_node *leaf = static_cast<leaf_node *>(cur);
-        for (int i = 0; i < leaf->count; ++i) {
-            if (leaf->key[i] == key) {
-                for (int j = i; j < leaf->count - 1; ++j) {
-                    leaf->key[j] = leaf->key[j + 1];
-                    leaf->data[j] = leaf->data[j + 1];
+        while (true) {
+            // cerr << "fuck" << std::endl;
+            if (Camp(leaf->key[leaf->count - 1], key) < 0) {
+                if (leaf->next == 0) break;
+                leaf = static_cast<leaf_node *>(get_node(leaf->next));
+                continue;
+            }
+            int i = 0;
+            while (i < leaf->count && Camp(leaf->key[i], key) < 0) ++i;
+            while (i < leaf->count && Camp(leaf->key[i], key) == 0) {
+                if (leaf->data[i].second == 1) {
+                    leaf->data[i].second = 0;
+                    break;
                 }
-                --leaf->count;
-                --m_size;
-                if (i == 0) { // update the key in the inner node
-                    for (int j = path.size() - 1; j >= 0; --j) {
-                        if (path[j].second > 0) {
-                            inner_node *inner = static_cast<inner_node *>(get_node(path[j].first));
-                            inner->key[path[j].second - 1] = leaf->key[0];
-                            break;
-                        }
-                    }
-                }
+                ++i;          
+            }
+            if (i == leaf->count && leaf->next != 0) {
+                leaf = static_cast<leaf_node *>(get_node(leaf->next));
+            } else {
                 break;
             }
         }
-        if (leaf->count < MIN_LEAF_SIZE) {
-            // merge or borrow
-            if (path.empty()) {
-                if (leaf->count == 0) { // size == 0
-                    // assert(size == 0);
-                    remove_node(leaf);
-                    m_root = 0;
-                }
-                return;
+        --m_size;
+    }
+
+    void print_node(int cur_index) {
+        node *cur = get_node(cur_index);
+        if (cur->is_inner()) {
+            inner_node &x = *static_cast<inner_node *>(cur);
+            cerr << "inner{ " << x.index << ", " << x.count << ": " << x.child[0] << " ";
+            for (int i = 1; i < x.count; ++i) {
+                cerr << "[" << x.key[i - 1] << "] " << x.child[i] << " ";
             }
-            if (leaf_merge_or_borrow(leaf,
-                                     static_cast<inner_node *>(get_node(path.back().first)),
-                                     path.back().second)) return;
-            while (!path.empty()) {
-                inner_node *inner = static_cast<inner_node *>(get_node(path.back().first));
-                path.pop_back();
-                if (inner->count < MIN_NODE_SIZE) {
-                    if (path.empty()) {
-                        if (inner->count == 1) {
-                            assert(m_root == inner->get_index());
-                            m_root = inner->child[0];
-                            remove_node(inner);
-                        }
-                        return;
-                    }
-                    if (inner_merge_or_borrow(inner,
-                                              static_cast<inner_node *>(get_node(path.back().first)),
-                                              path.back().second)) return;
-                } else {
-                    break;
-                }
+            cerr << "}" << endl;
+            for (int i = 0; i < x.count; ++i) {
+                print_node(x.child[i]);
             }
+        } else {
+            leaf_node &x = *static_cast<leaf_node *>(cur);
+            cerr << "leaf{ " << x.index << ", " << x.count << ": ";
+            for (int i = 0; i < x.count; ++i) {
+                cerr << "[" << x.key[i] << "] " << x.data[i].first << "(" << x.data[i].second <<
+                     ") ";
+            }
+            cerr << "}" << endl;
         }
     }
 
@@ -773,52 +606,28 @@ class BPlusTree {
         cerr << endl;
     }
 
-    size_t size() const {
-        return m_size;
-    }
-
-    bool empty() const {
-        return size() == 0;
-    }
-
 };
 typedef int Value_t;
-typedef uint64_t Key_t;
-
-template<uint64_t MOD = 1019260817, uint64_t BASE = 257>
-class stringhash {
-  public:
-    uint64_t operator()(const string &str) const {
-        uint64_t hash = 0;
-        for (int i = 0; i < str.size(); ++i) {
-            hash = (hash * BASE + str[i]) % MOD;
-        }
-        return hash;
-    }
-};
-
-
-
+typedef String<55> Key_t;
 int main() {
-    // BPlusTree<pair<Key_t, Value_t>, Value_t, 5, 5> bpt("data_file.db");
-    BPlusTree<pair<Key_t, Value_t>, Value_t, 205, 204> bpt("data_file.db");
+    // BPlusTree<Key_t, Value_t, 5, 5> bpt("data_file.db");
+    BPlusTree<pair<Key_t, Value_t>, Value_t, 64, 60> bpt("data_file.db");
     cin.tie(0);
     cout.tie(0);
     std::ios::sync_with_stdio(0);
     int n; cin >> n;
-    stringhash<> shash;
     for (int i = 1; i <= n; ++i) {
         std::string cmd;
         std::cin >> cmd;
         if (cmd == "insert") {
-            std::string key; Value_t value;
+            Key_t key; Value_t value;
             std::cin >> key >> value;
-            bpt.insert({shash(key), value}, value);
+            bpt.insert({key, value}, {value, 1});
         } else if (cmd == "find") {
-            std::string key;
+            Key_t key;
             std::cin >> key;
             std::vector<int> res;
-            bpt.search({shash(key), INT_MIN}, {shash(key), INT_MAX}, res);
+            bpt.search({key, INT_MIN}, {key, INT_MAX}, res);
             if (res.empty()) {
                 cout << "null" << endl;
             } else {
@@ -826,10 +635,12 @@ int main() {
                 std::cout << std::endl;
             }
         } else if (cmd == "delete") {
-            std::string key; Value_t value;
+            Key_t key; Value_t value;
             std::cin >> key >> value;
-            bpt.remove({shash(key), value});
+            bpt.naive_remove({key, value});
         }
+        // cerr << "i = " << i << endl;
+        // bpt.debug();
     }
     return 0;
 }
