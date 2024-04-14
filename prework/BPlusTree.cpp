@@ -1,26 +1,59 @@
-#include <climits>
-#include <cstddef>
-#include <cstdint>
-#include <cstdlib>
-#include <ctime>
 #include <cstring>
 #include <fstream>
 #include <iostream>
-#include <ostream>
 #include <string>
-#include <vector>
-#include <cassert>
-#include <algorithm>
-
-using namespace std;
 
 template <class Tp>
 int Camp(const Tp &x, const Tp &y) {
     return x < y ? -1 : (x == y ? 0 : 1);
 }
 
+template<class T1, class T2>
+class pair {
+  public:
+    T1 first;
+    T2 second;
+
+    constexpr pair() = default;
+    constexpr pair(const pair &other) = default;
+    constexpr pair(pair &&other) = default;
+
+    template<class U1 = T1, class U2 = T2>
+    constexpr pair(U1 && x, U2 && y)
+        : first(std::forward<U1>(x)), second(std::forward<U2>(y)) {}
+
+    template<class U1, class U2>
+    constexpr pair(const pair<U1, U2> &other)
+        : first(other.first), second(other.second) {}
+
+    template<class U1, class U2>
+    constexpr pair(pair<U1, U2> &&other)
+        : first(std::move(other.first))
+        , second(std::move(other.second)) {}
+
+    pair &operator=(const pair &other) = default;
+    pair &operator=(pair &&other) = default;
+
+
+    bool operator==(const pair &rhs) const {
+        return first == rhs.first && second == rhs.second;
+    }
+
+    bool operator!=(const pair &rhs) const {
+        return first != rhs.first || second != rhs.second;
+    }
+
+    bool operator<(const pair &rhs) const {
+        return first < rhs.first || (first == rhs.first && second < rhs.second);
+    }
+};
+
+template<class T1, class T2>
+pair(T1, T2) -> pair<T1, T2>;
+
+
 template<class Tp1, class Tp2>
-ostream &operator<<(ostream &os, const pair<Tp1, Tp2> &p) {
+std::ostream &operator<<(std::ostream &os, const pair<Tp1, Tp2> &p) {
     os << "(" << p.first << ", " << p.second << ")";
     return os;
 }
@@ -65,12 +98,10 @@ class String {
     }
 
     char &operator[](const int &k) {
-        static_assert(0 <= k && k < len, "String [] out of bound");
         return data[k];
     }
 
     char operator[](const int &k) const {
-        static_assert(0 <= k && k < len, "String [] out of bound");
         return data[k];
     }
 
@@ -93,8 +124,8 @@ class String {
 template<int info_len, size_t BLOCK_SIZE = 4096>
 class File {
   private:
-    fstream file;
-    string file_name;
+    std::fstream file;
+    std::string file_name;
     char buffer[BLOCK_SIZE];
     char infobuffer[info_len * sizeof(int)];
   public:
@@ -103,7 +134,7 @@ class File {
         memset(buffer, 0, sizeof(buffer));
     }
 
-    File(const string &file_name) : file_name(file_name) {
+    File(const std::string &file_name) : file_name(file_name) {
         static_assert(info_len * sizeof(int) <= BLOCK_SIZE, "info_len is too large");
         memset(buffer, 0, sizeof(buffer));
     }
@@ -115,7 +146,7 @@ class File {
     }
 
     // init the file: create file if not exist or clear the file
-    void init(string FN = "") {
+    void init(std::string FN = "") {
         if (FN != "") file_name = FN;
         file.open(file_name, std::ios::out | std::ios::binary);
         file.write(buffer, BLOCK_SIZE);
@@ -133,7 +164,7 @@ class File {
     }
 
     // just open the file
-    void open(string FN = "") {
+    void open(std::string FN = "") {
         if (FN != "") file_name = FN;
         file.open(file_name, std::ios::in | std::ios::out | std::ios::binary);
         file.seekg(0);
@@ -178,9 +209,88 @@ class File {
 
 };
 
+template <class Tp>
+class stack {
+  private:
+    struct node {
+        Tp value;
+        node *next;
+    };
+    size_t m_size;
+    node *m_top;
+  public:
+
+    stack() : m_size(0), m_top(nullptr) {}
+    ~stack() {
+        while (m_top) {
+            node *tmp = m_top;
+            m_top = m_top->next;
+            delete tmp;
+        }
+    }
+
+    struct iterator {
+        node *ptr;
+        iterator(node *_ptr) : ptr(_ptr) {}
+        Tp operator*() const {
+            return ptr->value;
+        }
+        Tp *operator->() const {
+            return &(ptr->value);
+        }
+        bool operator==(const iterator &rhs) const {
+            return ptr == rhs.ptr;
+        }
+        bool operator!=(const iterator &rhs) const {
+            return ptr != rhs.ptr;
+        }
+
+        iterator &operator++() {
+            ptr = ptr->next;
+            return *this;
+        }
+        iterator operator++(int) {
+            iterator tmp = *this;
+            ptr = ptr->next;
+            return tmp;
+        }
+    };
+
+    iterator begin() {
+        return iterator(m_top);
+    }
+
+    iterator end() {
+        return iterator(nullptr);
+    }
+
+    Tp top() const {
+        return m_top->value;
+    }
+
+    void push(const Tp &value) {
+        node *tmp = new node{value, m_top};
+        m_top = tmp;
+        ++m_size;
+    }
+    void pop() {
+        node *tmp = m_top;
+        m_top = m_top->next;
+        delete tmp;
+        --m_size;
+    }
+    size_t size() const {
+        return m_size;
+    }
+    bool empty() const {
+        return m_size == 0;
+    }
+};
+
 
 // B+ Tree database, Every Key should be unique!!
 template < typename Key, typename Tp, size_t M, size_t L,
+           size_t FILE_BLOCK_SIZE = 4096 * 2,
            size_t MAX_CACHE_SIZE = 40,
            size_t MAX_NODE_SIZE = M,
            size_t MIN_NODE_SIZE = (M + 1) / 2,
@@ -219,7 +329,7 @@ class BPlusTree {
 
     int m_size; // size of the tree (number of the data)
     int m_root; // index of the root node
-    File<2> data_file;
+    File<2, FILE_BLOCK_SIZE> data_file;
 
     node *cache[MAX_CACHE_SIZE];
     unsigned long long update_time[MAX_CACHE_SIZE];
@@ -227,9 +337,9 @@ class BPlusTree {
 
   public:
     BPlusTree(std::string data_file_name) : data_file(data_file_name) {
-        static_assert(sizeof(inner_node) <= 4096,
+        static_assert(sizeof(inner_node) <= FILE_BLOCK_SIZE,
                       "inner_node is too large, please use smaller M");
-        static_assert(sizeof(leaf_node) <= 4096,
+        static_assert(sizeof(leaf_node) <= FILE_BLOCK_SIZE,
                       "leaf_node is too large, please use smaller L");
         if (!data_file.exist()) {
             data_file.init();
@@ -286,11 +396,13 @@ class BPlusTree {
         // cerr  << "get_node from disk index =  " << index << endl;
         if (index > 0) {
             cache[pos] = new inner_node;
-            data_file.read<inner_node>(*static_cast<inner_node *>(cache[pos]), index);
+            data_file.template read<inner_node>(*static_cast<inner_node *>(cache[pos]),
+                                                index);
             // cerr  << "get inner node: " << cache[pos]->index << endl;
         } else {
             cache[pos] = new leaf_node;
-            data_file.read<leaf_node>(*static_cast<leaf_node *>(cache[pos]), -index);
+            data_file.template read<leaf_node>(*static_cast<leaf_node *>(cache[pos]),
+                                               -index);
             // cerr  << "get leaf node: " << cache[pos]->index << endl;
         }
         // cache[pos]->print();
@@ -342,10 +454,12 @@ class BPlusTree {
     void write_node(node *p) {
         if (p->is_inner()) {
             // cerr  << "write inner node " << p->get_index() << endl;
-            data_file.update<inner_node>(*static_cast<inner_node *>(p), p->get_index());
+            data_file.template update<inner_node>(*static_cast<inner_node *>(p),
+                                                  p->get_index());
         } else {
             // cerr  << "write leaf node " << p->get_index() << endl;
-            data_file.update<leaf_node>(*static_cast<leaf_node *>(p), p->get_index());
+            data_file.template update<leaf_node>(*static_cast<leaf_node *>(p),
+                                                 p->get_index());
         }
     }
 
@@ -605,22 +719,23 @@ class BPlusTree {
         if (cur->is_inner()) {
             // if (cur_index != m_root) assert(cur->count >= MIN_NODE_SIZE);
             inner_node &x = *static_cast<inner_node *>(cur);
-            cerr << "inner{ " << x.index << ", " << x.count << ": " << x.child[0] << " ";
+            std::cerr << "inner{ " << x.index << ", " << x.count << ": " << x.child[0] <<
+                      " ";
             for (int i = 1; i < x.count; ++i) {
-                cerr << "[" << x.key[i - 1] << "] " << x.child[i] << " ";
+                std::cerr << "[" << x.key[i - 1] << "] " << x.child[i] << " ";
             }
-            cerr << "}" << endl;
+            std::cerr << "}" << std::endl;
             for (int i = 0; i < x.count; ++i) {
                 print_node(x.child[i]);
             }
         } else {
             // if (cur_index != m_root) assert(cur->count >= MIN_LEAF_SIZE);
             leaf_node &x = *static_cast<leaf_node *>(cur);
-            cerr << "leaf{ " << x.index << ", " << x.count << ": ";
+            std::cerr << "leaf{ " << x.index << ", " << x.count << ": ";
             for (int i = 0; i < x.count; ++i) {
-                cerr << "[" << x.key[i] << "] " << x.data[i] << " ";
+                std::cerr << "[" << x.key[i] << "] " << x.data[i] << " ";
             }
-            cerr << "}" << endl;
+            std::cerr << "}" << std::endl;
         }
     }
 
@@ -637,14 +752,14 @@ class BPlusTree {
             return;
         }
         ++m_size;
-        std::vector<std::pair<int, int>> path; // path from root to leaf <index, pos>
+        stack<pair<int, int>> path; // path from root to leaf <index, pos>
         node *cur = get_node(m_root);
         while (cur->is_inner()) {
             int i = 0;
             while (i < cur->count - 1
                    && Camp(static_cast<inner_node *>(cur)->key[i], key) < 0)
                 ++i;
-            path.push_back({cur->index, i});
+            path.push({cur->index, i});
             cur = get_node(static_cast<inner_node *>(cur)->child[i]);
         }
         leaf_node *leaf = static_cast<leaf_node *>(cur);
@@ -653,10 +768,10 @@ class BPlusTree {
         while (!path.empty() && index != 0) {
             auto kkey = upload_key;
             auto cchild = index;
-            inner_node_insert(static_cast<inner_node *>(get_node(path.back().first)),
-                              path.back().second, kkey, cchild, index,
+            inner_node_insert(static_cast<inner_node *>(get_node(path.top().first)),
+                              path.top().second, kkey, cchild, index,
                               upload_key);
-            path.pop_back();
+            path.pop();
         }
         if (index != 0) { // create new root
             inner_node *new_root = static_cast<inner_node *>(new_node(true));
@@ -668,7 +783,7 @@ class BPlusTree {
         }
     }
 
-    void search(const Key_t &key_L, const Key_t &key_R, std::vector<Tp> &res) {
+    void search(const Key_t &key_L, const Key_t &key_R, Data_t *&res) {
         if (m_size == 0) return;
         node *cur = get_node(m_root);
         while (cur->is_inner()) {
@@ -687,7 +802,9 @@ class BPlusTree {
             int i = 0;
             while (i < leaf->count && Camp(leaf->key[i], key_L) < 0) ++i;
             while (i < leaf->count && Camp(leaf->key[i], key_R) <= 0) {
-                res.push_back(leaf->data[i]);
+                // res.push(leaf->data[i]);
+                *res = leaf->data[i];
+                ++res;
                 ++i;
             }
             if (i == leaf->count && leaf->next != 0) {
@@ -696,19 +813,19 @@ class BPlusTree {
                 break;
             }
         }
-        sort(res.begin(), res.end());
+        // sort(res.begin(), res.end());
     }
 
     void remove(const Key_t &key) {
         if (m_size == 0) return;
-        std::vector<std::pair<int, int>> path; // path from root to leaf <index, pos>
+        stack<pair<int, int>> path; // path from root to leaf <index, pos>
         node *cur = get_node(m_root);
         while (cur->is_inner()) {
             int i = 0;
             while (i < cur->count - 1
                    && Camp(static_cast<inner_node *>(cur)->key[i], key) <= 0)
                 ++i;
-            path.push_back({cur->index, i});
+            path.push({cur->index, i});
             cur = get_node(static_cast<inner_node *>(cur)->child[i]);
         }
         leaf_node *leaf = static_cast<leaf_node *>(cur);
@@ -721,10 +838,10 @@ class BPlusTree {
                 --leaf->count;
                 --m_size;
                 if (i == 0) { // update the key in the inner node
-                    for (int j = path.size() - 1; j >= 0; --j) {
-                        if (path[j].second > 0) {
-                            inner_node *inner = static_cast<inner_node *>(get_node(path[j].first));
-                            inner->key[path[j].second - 1] = leaf->key[0];
+                    for (auto it = path.begin(); it != path.end(); ++it) {
+                        if (it->second > 0) {
+                            inner_node *inner = static_cast<inner_node *>(get_node(it->first));
+                            inner->key[it->second - 1] = leaf->key[0];
                             break;
                         }
                     }
@@ -743,23 +860,23 @@ class BPlusTree {
                 return;
             }
             if (leaf_merge_or_borrow(leaf,
-                                     static_cast<inner_node *>(get_node(path.back().first)),
-                                     path.back().second)) return;
+                                     static_cast<inner_node *>(get_node(path.top().first)),
+                                     path.top().second)) return;
             while (!path.empty()) {
-                inner_node *inner = static_cast<inner_node *>(get_node(path.back().first));
-                path.pop_back();
+                inner_node *inner = static_cast<inner_node *>(get_node(path.top().first));
+                path.pop();
                 if (inner->count < MIN_NODE_SIZE) {
                     if (path.empty()) {
                         if (inner->count == 1) {
-                            assert(m_root == inner->get_index());
+                            // assert(m_root == inner->get_index());
                             m_root = inner->child[0];
                             remove_node(inner);
                         }
                         return;
                     }
                     if (inner_merge_or_borrow(inner,
-                                              static_cast<inner_node *>(get_node(path.back().first)),
-                                              path.back().second)) return;
+                                              static_cast<inner_node *>(get_node(path.top().first)),
+                                              path.top().second)) return;
                 } else {
                     break;
                 }
@@ -768,9 +885,9 @@ class BPlusTree {
     }
 
     void debug() {
-        cerr << "Tree size: " << m_size << endl;
+        std::cerr << "Tree size: " << m_size << std::endl;
         if (m_root) print_node(m_root);
-        cerr << endl;
+        std::cerr << std::endl;
     }
 
     size_t size() const {
@@ -788,7 +905,7 @@ typedef uint64_t Key_t;
 template<uint64_t MOD = 1019260817, uint64_t BASE = 257>
 class stringhash {
   public:
-    uint64_t operator()(const string &str) const {
+    uint64_t operator()(const std::string &str) const {
         uint64_t hash = 0;
         for (int i = 0; i < str.size(); ++i) {
             hash = (hash * BASE + str[i]) % MOD;
@@ -797,15 +914,15 @@ class stringhash {
     }
 };
 
-
+Value_t fuckyou[300000];
 
 int main() {
     // BPlusTree<pair<Key_t, Value_t>, Value_t, 5, 5> bpt("data_file.db");
-    BPlusTree<pair<Key_t, Value_t>, Value_t, 205, 204> bpt("data_file.db");
-    cin.tie(0);
-    cout.tie(0);
+    BPlusTree<pair<Key_t, Value_t>, Value_t, 205, 204, 4096> bpt("data_file.db");
+    std::cin.tie(0);
+    std::cout.tie(0);
     std::ios::sync_with_stdio(0);
-    int n; cin >> n;
+    int n; std::cin >> n;
     stringhash<> shash;
     for (int i = 1; i <= n; ++i) {
         std::string cmd;
@@ -817,12 +934,12 @@ int main() {
         } else if (cmd == "find") {
             std::string key;
             std::cin >> key;
-            std::vector<int> res;
-            bpt.search({shash(key), INT_MIN}, {shash(key), INT_MAX}, res);
-            if (res.empty()) {
-                cout << "null" << endl;
+            Value_t *ps = fuckyou;
+            bpt.search({shash(key), -2147483648}, {shash(key), 2147483647}, ps);
+            if (ps == fuckyou) {
+                std::cout << "null" << std::endl;
             } else {
-                for (auto &i : res) std::cout << i << " ";
+                for (Value_t *pp = fuckyou; pp != ps; ++pp) std::cout << *pp << " ";
                 std::cout << std::endl;
             }
         } else if (cmd == "delete") {
