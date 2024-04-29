@@ -35,3 +35,8 @@
 *.db
 *.txt
 *.bak
+
+# CMake
+.cache/*
+.vscode/*
+build/*
