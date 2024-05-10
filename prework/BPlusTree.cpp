@@ -1125,7 +1125,7 @@ template <
 }
 
 
-template <typename Tp> 
+template <typename Tp>
 inline void quickcopy(Tp *dest, const Tp *src, size_t n) {
     memmove(dest, src, n * sizeof(Tp));
 }
@@ -1141,6 +1141,7 @@ template < typename Key, typename Tp, size_t M, size_t L,
 class BPlusTree {
     using Data_t = Tp;
     using Key_t = Key;
+    using File_t = File<3, FILE_BLOCK_SIZE>;
     struct node {
         int count; // count of children
         int index; // index in disk , >0 is inner_node, <0 is leaf_node, =0 is empty
@@ -1167,16 +1168,29 @@ class BPlusTree {
     };
 
     class BNodePtr {
-        File<2, FILE_BLOCK_SIZE> *file;
-        size_t *refCount;
+        File_t *file;
+        size_t *tag;
         node *ptr;
 
+        int get_ref() {
+            return tag ? (*tag & ((1u << 31) - 1)) : 0;
+        }
+        bool is_dirty() {
+            return tag && (*tag & (1u << 31));
+        }
+        void inc_ref() {
+            if (tag) ++(*tag);
+        }
+        void dec_ref() {
+            if (tag) --(*tag);
+        }
+
       public:
-        BNodePtr() : file(nullptr), refCount(nullptr), ptr(nullptr) {}
-        BNodePtr(File<2, FILE_BLOCK_SIZE> *dbfile, node *_ptr) : file(dbfile),
-            refCount(new size_t(1)), ptr(_ptr) {}
-        BNodePtr(File<2, FILE_BLOCK_SIZE> *dbfile, int index) : file(dbfile),
-            refCount(new size_t(1)) {
+        BNodePtr() : file(nullptr), tag(nullptr), ptr(nullptr) {}
+        BNodePtr(File_t *dbfile, node *_ptr) : file(dbfile),
+            tag(new size_t(1)), ptr(_ptr) {}
+        BNodePtr(File_t *dbfile, int index) : file(dbfile),
+            tag(new size_t(1)) {
             if (index > 0) {
                 ptr = new inner_node;
                 file->template read<inner_node>(*static_cast<inner_node *>(ptr), index);
@@ -1185,40 +1199,44 @@ class BPlusTree {
                 file->template read<leaf_node>(*static_cast<leaf_node *>(ptr), -index);
             }
         }
-        BNodePtr(const BNodePtr &other) : file(other.file), refCount(other.refCount),
+        BNodePtr(const BNodePtr &other) : file(other.file), tag(other.tag),
             ptr(other.ptr) {
-            if (refCount) ++(*refCount);
+            if (tag) ++(*tag);
         }
-        BNodePtr(BNodePtr &&other) : file(other.file), refCount(other.refCount),
+        BNodePtr(BNodePtr &&other) : file(other.file), tag(other.tag),
             ptr(other.ptr) {
-            other.refCount = nullptr;
+            other.tag = nullptr;
             other.ptr = nullptr;
             other.file = nullptr;
         }
         BNodePtr &operator=(const BNodePtr &other) {
             if (this == &other) return *this;
-            if (refCount == other.refCount) return *this; // pointer to the same object
+            if (tag == other.tag) return *this; // pointer to the same object
             clear();
             file = other.file;
-            refCount = other.refCount;
+            tag = other.tag;
             ptr = other.ptr;
-            if (refCount) ++(*refCount);
+            if (tag) ++(*tag);
             return *this;
         }
+        void set_dirty() {
+            if (tag) *tag |= 1u << 31;
+        }
         void clear() {
-            if (refCount) {
-                --(*refCount);
-                if (*refCount == 0) {
+            if (tag) {
+                dec_ref();
+                if (get_ref() == 0) {
                     if (ptr->is_inner()) {
-                        file->template update<inner_node>(*static_cast<inner_node *>(ptr),
-                                                          ptr->get_index());
+                        if (is_dirty()) file->template update<inner_node>(*static_cast<inner_node *>
+                                (ptr),
+                                ptr->get_index());
                         delete static_cast<inner_node *>(ptr);
                     } else {
-                        file->template update<leaf_node>(*static_cast<leaf_node *>(ptr),
-                                                         ptr->get_index());
+                        if (is_dirty()) file->template update<leaf_node>(*static_cast<leaf_node *>(ptr),
+                                ptr->get_index());
                         delete static_cast<leaf_node *>(ptr);
                     }
-                    delete refCount;
+                    delete tag;
                 }
             }
         }
@@ -1243,14 +1261,11 @@ class BPlusTree {
 
     int m_size; // size of the tree (number of the data)
     int m_root; // index of the root node
-    File<2, FILE_BLOCK_SIZE> data_file;
+    int m_recycle_head; // head of the recycle list
+    File_t data_file;
 
     queue < int, MAX_CACHE_SIZE + 2 > cache;
     sjtu::map<int, BNodePtr> cache_map;
-
-    pair<BNodePtr, int>
-    path[100]; // path from root to leaf <index, pos>, 100 is enough
-    int path_top;
 
   public:
 
@@ -1269,20 +1284,19 @@ class BPlusTree {
                       "leaf_node is too large, please use smaller L");
         if (!data_file.exist()) {
             data_file.init();
-            // cerr << "init" << endl;
         } else {
             data_file.open();
-            // cerr << "open" << endl;
         }
         data_file.get_info(m_root, 1);
         data_file.get_info(m_size, 2);
-        // cerr << "root " << root << " size " << size << endl;
+        data_file.get_info(m_recycle_head, 3);
         init_cache();
     }
 
     ~BPlusTree() {
         data_file.write_info(m_root, 1);
         data_file.write_info(m_size, 2);
+        data_file.write_info(m_recycle_head, 3);
         clear_cache();
     }
 
@@ -1310,16 +1324,26 @@ class BPlusTree {
 
     BNodePtr new_node(bool is_inner) {
         shrink_cache();
-        BNodePtr p(&data_file, is_inner ? static_cast<node *>(new inner_node) :
-                   static_cast<node *>(new leaf_node));
-        p->set_index(data_file.write(), is_inner);
-        cache.push(p->index);
-        cache_map.insert({p->index, p});
+        BNodePtr p;
+        if (m_recycle_head != 0) {
+            int tmp = m_recycle_head;
+            p = get_node(is_inner ? m_recycle_head : -m_recycle_head);
+            m_recycle_head = p->count;
+            p->set_index(tmp, is_inner);
+        } else {
+            p = BNodePtr(&data_file, is_inner ? static_cast<node *>(new inner_node) :
+                         static_cast<node *>(new leaf_node));
+            p->set_index(data_file.write(), is_inner);
+            cache.push(p->index);
+            cache_map.insert({p->index, p});
+        }
+        p.set_dirty();
         return p;
     }
 
     void remove_node(node *p) {
-        // TODO: recycle the node
+        p->count = m_recycle_head;
+        m_recycle_head = p->get_index();
         cache_map.erase(p->index);
     }
 
@@ -1364,24 +1388,27 @@ class BPlusTree {
             if (Camp(key, leaf->key[MIN_LEAF_SIZE - 1]) <=
                 0) { // key <= leaf->key[MIN_LEAF_SIZE - 1]
                 // insert key to the left node (leaf)
-                    // for (int i = 0; i < MAX_LEAF_SIZE + 1 - MIN_LEAF_SIZE; ++i) {
-                    //     new_leaf->key[i] = leaf->key[i + MIN_LEAF_SIZE - 1];
-                    //     new_leaf->data[i] = leaf->data[i + MIN_LEAF_SIZE - 1];
-                    // }
-                quickcopy(new_leaf->key, leaf->key + MIN_LEAF_SIZE - 1, MAX_LEAF_SIZE + 1 - MIN_LEAF_SIZE);
-                quickcopy(new_leaf->data, leaf->data + MIN_LEAF_SIZE - 1, MAX_LEAF_SIZE + 1 - MIN_LEAF_SIZE);
-
+                // for (int i = 0; i < MAX_LEAF_SIZE + 1 - MIN_LEAF_SIZE; ++i) {
+                //     new_leaf->key[i] = leaf->key[i + MIN_LEAF_SIZE - 1];
+                //     new_leaf->data[i] = leaf->data[i + MIN_LEAF_SIZE - 1];
+                // }
+                quickcopy(new_leaf->key, leaf->key + MIN_LEAF_SIZE - 1,
+                          MAX_LEAF_SIZE + 1 - MIN_LEAF_SIZE);
+                quickcopy(new_leaf->data, leaf->data + MIN_LEAF_SIZE - 1,
+                          MAX_LEAF_SIZE + 1 - MIN_LEAF_SIZE);
                 leaf->count = MIN_LEAF_SIZE - 1;
                 new_leaf->count = MAX_LEAF_SIZE + 1 - MIN_LEAF_SIZE;
                 insert_valdata(leaf->key, leaf->data, leaf->count, key, data);
             } else {
                 // insert key to the right node (new_leaf)
-                    // for (int i = 0; i < MAX_LEAF_SIZE - MIN_LEAF_SIZE; ++i) {
-                    //     new_leaf->key[i] = leaf->key[i + MIN_LEAF_SIZE];
-                    //     new_leaf->data[i] = leaf->data[i + MIN_LEAF_SIZE];
-                    // }
-                quickcopy(new_leaf->key, leaf->key + MIN_LEAF_SIZE, MAX_LEAF_SIZE - MIN_LEAF_SIZE);
-                quickcopy(new_leaf->data, leaf->data + MIN_LEAF_SIZE, MAX_LEAF_SIZE - MIN_LEAF_SIZE);
+                // for (int i = 0; i < MAX_LEAF_SIZE - MIN_LEAF_SIZE; ++i) {
+                //     new_leaf->key[i] = leaf->key[i + MIN_LEAF_SIZE];
+                //     new_leaf->data[i] = leaf->data[i + MIN_LEAF_SIZE];
+                // }
+                quickcopy(new_leaf->key, leaf->key + MIN_LEAF_SIZE,
+                          MAX_LEAF_SIZE - MIN_LEAF_SIZE);
+                quickcopy(new_leaf->data, leaf->data + MIN_LEAF_SIZE,
+                          MAX_LEAF_SIZE - MIN_LEAF_SIZE);
                 leaf->count = MIN_LEAF_SIZE;
                 new_leaf->count = MAX_LEAF_SIZE  - MIN_LEAF_SIZE;
                 insert_valdata(new_leaf->key, new_leaf->data, new_leaf->count, key, data);
@@ -1439,22 +1466,28 @@ class BPlusTree {
 
     bool leaf_merge_or_borrow(leaf_node *leaf, inner_node *father, int pos) {
         bool borrow = false;
+        BNodePtr Left_bro, Right_bro;
         leaf_node *left_bro = nullptr, *right_bro = nullptr;
         if (pos > 0) { // try left
-            left_bro = get_node(father->child[pos - 1]).as_leaf();
-            if (left_bro->count > MIN_LEAF_SIZE) {
+            Left_bro = get_node(father->child[pos - 1]);
+            left_bro = Left_bro.as_leaf();
+            // left_bro = get_node(father->child[pos - 1]).as_leaf();
+            if (Left_bro->count > MIN_LEAF_SIZE) {
                 borrow = true;
             }
         }
         if (!borrow && pos + 1 < father->count) { // try right
-            right_bro = get_node(father->child[pos + 1]).as_leaf();
-            if (right_bro->count > MIN_LEAF_SIZE) {
+            Right_bro = get_node(father->child[pos + 1]);
+            right_bro = Right_bro.as_leaf();
+            // right_bro = get_node(father->child[pos + 1]).as_leaf();
+            if (Right_bro->count > MIN_LEAF_SIZE) {
                 left_bro = nullptr;
                 borrow = true;
             }
         }
         if (borrow) { // borrow
             if (left_bro) { // borrow from left bother
+                Left_bro.set_dirty();
                 for (int i = leaf->count; i > 0; --i) {
                     leaf->key[i] = leaf->key[i - 1];
                     leaf->data[i] = leaf->data[i - 1];
@@ -1465,6 +1498,7 @@ class BPlusTree {
                 --left_bro->count;
                 father->key[pos - 1] = leaf->key[0];
             } else { // borrow from right bother
+                Right_bro.set_dirty();
                 leaf->key[leaf->count] = right_bro->key[0];
                 leaf->data[leaf->count] = right_bro->data[0];
                 ++leaf->count;
@@ -1477,6 +1511,7 @@ class BPlusTree {
             }
         } else { // merge
             if (left_bro) { // merge with left brother
+                Left_bro.set_dirty();
                 for (int i = 0; i < leaf->count; ++i) {
                     left_bro->key[left_bro->count + i] = leaf->key[i];
                     left_bro->data[left_bro->count + i] = leaf->data[i];
@@ -1490,6 +1525,7 @@ class BPlusTree {
                 }
                 --father->count;
             } else { // merge with right brother
+                Right_bro.set_dirty();
                 for (int i = 0; i < right_bro->count; ++i) {
                     leaf->key[leaf->count + i] = right_bro->key[i];
                     leaf->data[leaf->count + i] = right_bro->data[i];
@@ -1509,15 +1545,18 @@ class BPlusTree {
 
     bool inner_merge_or_borrow(inner_node *inner, inner_node *father, int pos) {
         bool borrow = false;
+        BNodePtr Left_bro, Right_bro;
         inner_node *left_bro = nullptr, *right_bro = nullptr;
         if (pos > 0) { // try left
-            left_bro = get_node(father->child[pos - 1]).as_inner();
+            Left_bro = get_node(father->child[pos - 1]);
+            left_bro = Left_bro.as_inner();
             if (left_bro->count > MIN_LEAF_SIZE) {
                 borrow = true;
             }
         }
         if (!borrow && pos + 1 < father->count) { // try right
-            right_bro = get_node(father->child[pos + 1]).as_inner();
+            Right_bro = get_node(father->child[pos + 1]);
+            right_bro = Right_bro.as_inner();
             if (right_bro->count > MIN_LEAF_SIZE) {
                 left_bro = nullptr;
                 borrow = true;
@@ -1525,6 +1564,7 @@ class BPlusTree {
         }
         if (borrow) {
             if (left_bro) { // borrow from left bother
+                Left_bro.set_dirty();
                 for (int i = inner->count; i > 0; --i) {
                     if (i > 1) inner->key[i - 1] = inner->key[i - 2];
                     inner->child[i] = inner->child[i - 1];
@@ -1535,6 +1575,7 @@ class BPlusTree {
                 ++inner->count;
                 --left_bro->count;
             } else { // borrow from right bother
+                Right_bro.set_dirty();
                 inner->key[inner->count - 1] = father->key[pos];
                 inner->child[inner->count] = right_bro->child[0];
                 father->key[pos] = right_bro->key[0];
@@ -1547,6 +1588,7 @@ class BPlusTree {
             }
         } else {
             if (left_bro) { // merge with left brother
+                Left_bro.set_dirty();
                 left_bro->key[left_bro->count - 1] = father->key[pos - 1];
                 left_bro->child[left_bro->count] = inner->child[0];
                 for (int i = 1; i < inner->count; ++i) {
@@ -1561,6 +1603,7 @@ class BPlusTree {
                 }
                 --father->count;
             } else { // merge with right brother
+                Right_bro.set_dirty();
                 inner->key[inner->count - 1] = father->key[pos];
                 inner->child[inner->count] = right_bro->child[0];
                 for (int i = 1; i < right_bro->count; ++i) {
@@ -1606,6 +1649,9 @@ class BPlusTree {
 
   public:
     void insert(const Key_t &key, const Data_t &data) {
+        pair<BNodePtr, int>
+        path[40]; // path from root to leaf <index, pos>, 40 is enough
+        int path_top;
         if (m_size == 0) {
             leaf_node *cur = new_node(false).as_leaf();
             m_root = cur->index;
@@ -1627,12 +1673,14 @@ class BPlusTree {
             path[++path_top] = {cur, i};
             cur = get_node(cur.as_inner()->child[i]);
         }
+        cur.set_dirty();
         leaf_node *leaf = cur.as_leaf();
         int index; Key_t upload_key;
         leaf_node_insert(leaf, key, data, index, upload_key);
         while (path_top != -1 && index != 0) {
             auto kkey = upload_key;
             auto cchild = index;
+            path[path_top].first.set_dirty();
             inner_node_insert(path[path_top].first.as_inner(),
                               path[path_top].second, kkey, cchild, index,
                               upload_key);
@@ -1681,6 +1729,9 @@ class BPlusTree {
     }
 
     void remove(const Key_t &key) {
+        pair<BNodePtr, int>
+        path[40]; // path from root to leaf <index, pos>, 40 is enough
+        int path_top;
         if (m_size == 0) return;
         path_top = -1;
         BNodePtr cur = get_node(m_root);
@@ -1692,6 +1743,7 @@ class BPlusTree {
             path[++path_top] = {cur, i};
             cur = get_node(cur.as_inner()->child[i]);
         }
+        cur.set_dirty();
         leaf_node *leaf = cur.as_leaf();
         for (int i = 0; i < leaf->count; ++i) {
             if (leaf->key[i] == key) {
@@ -1705,6 +1757,7 @@ class BPlusTree {
                     for (int i = path_top; i >= 0; --i) {
                         if (path[i].second > 0) {
                             BNodePtr inner = path[i].first;
+                            inner.set_dirty();
                             inner.as_inner()->key[path[i].second - 1] = leaf->key[0];
                             break;
                         }
@@ -1723,6 +1776,7 @@ class BPlusTree {
                 }
                 return;
             }
+            path[path_top].first.set_dirty();
             if (leaf_merge_or_borrow(leaf,
                                      path[path_top].first.as_inner(),
                                      path[path_top].second)) return;
@@ -1738,6 +1792,7 @@ class BPlusTree {
                         }
                         return;
                     }
+                    path[path_top].first.set_dirty();
                     if (inner_merge_or_borrow(inner,
                                               path[path_top].first.as_inner(),
                                               path[path_top].second)) return;
