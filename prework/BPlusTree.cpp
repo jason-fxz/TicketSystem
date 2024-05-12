@@ -1,10 +1,11 @@
+#include <cstddef>
 #include <iostream>
 #include <string>
 #include "utility.hpp"
 #include "exceptions.hpp"
 #include "String.hpp"
 #include "File.hpp"
-#include <map>
+#include <unordered_map>
 
 namespace sjtu {
 
@@ -60,7 +61,7 @@ inline void quickcopy(Tp *dest, const Tp *src, size_t n) {
 // B+ Tree database, Every Key should be unique!!
 template < typename Key, typename Tp, size_t M, size_t L,
            size_t FILE_BLOCK_SIZE = 4096,
-           size_t MAX_CACHE_SIZE = 1000,
+           size_t MAX_CACHE_SIZE = 4000,
            size_t MAX_NODE_SIZE = M,
            size_t MIN_NODE_SIZE = (M + 1) / 2,
            size_t MAX_LEAF_SIZE = L,
@@ -192,7 +193,12 @@ class BPlusTree {
     File_t data_file;
 
     queue < int, MAX_CACHE_SIZE + 2 > cache;
-    std::map<int, BNodePtr> cache_map;
+    std::unordered_map<int, BNodePtr> cache_map;
+
+
+    // for debug
+    size_t count_of_get_node = 0;
+    size_t count_of_get_node_in_cache = 0;
 
   public:
 
@@ -225,6 +231,13 @@ class BPlusTree {
         data_file.write_info(m_size, 2);
         data_file.write_info(m_recycle_head, 3);
         clear_cache();
+
+        std::cerr << "count_of_get_node: " << count_of_get_node << std::endl;
+        std::cerr << "count_of_get_node_in_cache: " << count_of_get_node_in_cache << std::endl;
+        std::cerr << count_of_get_node_in_cache / (double)count_of_get_node * 100 << " %" << std::endl;
+
+        std::cerr << "size = " << m_size << std::endl;
+        
     }
 
   private:
@@ -238,11 +251,16 @@ class BPlusTree {
         }
     }
 
+
+
     BNodePtr get_node(int index) {
+        ++count_of_get_node;
         if (cache_map.count(index)) {
+            ++count_of_get_node_in_cache;
             return cache_map.at(index);
         }
         shrink_cache();
+        // std::cerr << "!!!" << cache_map.size() << std::endl;
         BNodePtr p(&data_file, index);
         cache.push(index);
         cache_map.insert({index, p});
@@ -250,6 +268,7 @@ class BPlusTree {
     }
 
     BNodePtr new_node(bool is_inner) {
+        ++count_of_get_node;
         shrink_cache();
         BNodePtr p;
         if (m_recycle_head != 0) {
@@ -769,7 +788,7 @@ Value_t fuckyou[300000];
 using namespace sjtu;
 int main() {
     // BPlusTree<pair<Key_t, Value_t>, Value_t, 5, 5> bpt("data_file.db");
-    BPlusTree<pair<Key_t, Value_t>, Value_t, 205, 204, 4096, 8000>
+    BPlusTree<pair<Key_t, Value_t>, Value_t, 205, 204, 4096, 3000>
     bpt("data_file.db");
     std::cin.tie(0);
     std::cout.tie(0);
