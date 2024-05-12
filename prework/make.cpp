@@ -8,6 +8,12 @@ int rnd(int l, int r) {
 }
 // shuffle();
 char word[10000][40];
+/**
+ * @brief 
+ 
+ * 
+ * @return int 
+ */
 int main() {
     // uniform_int_distribution<int> ;
     // uniform_real_distribution<double> ;

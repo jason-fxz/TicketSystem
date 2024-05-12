@@ -1,3 +1,14 @@
+/**
+ * @file File.hpp
+ * @author JasonFan (jasonfanxz@gmail.com)
+ * @brief File class template
+ * @version 1.0
+ * @date 2024-05-11
+ * 
+ * @copyright Copyright (c) 2024
+ * 
+ */
+
 #ifndef __FILE_HPP
 #define __FILE_HPP
 

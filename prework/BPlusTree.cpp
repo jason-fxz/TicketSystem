@@ -2,10 +2,9 @@
 #include <iostream>
 #include <string>
 #include "utility.hpp"
-#include "exceptions.hpp"
 #include "String.hpp"
 #include "File.hpp"
-#include <unordered_map>
+#include "Hashmap.hpp"
 
 namespace sjtu {
 
@@ -193,7 +192,7 @@ class BPlusTree {
     File_t data_file;
 
     queue < int, MAX_CACHE_SIZE + 2 > cache;
-    std::unordered_map<int, BNodePtr> cache_map;
+    Hashmap<int, BNodePtr, 2999> cache_map;
 
 
     // for debug
@@ -232,11 +231,11 @@ class BPlusTree {
         data_file.write_info(m_recycle_head, 3);
         clear_cache();
 
-        std::cerr << "count_of_get_node: " << count_of_get_node << std::endl;
-        std::cerr << "count_of_get_node_in_cache: " << count_of_get_node_in_cache << std::endl;
-        std::cerr << count_of_get_node_in_cache / (double)count_of_get_node * 100 << " %" << std::endl;
+        // std::cerr << "count_of_get_node: " << count_of_get_node << std::endl;
+        // std::cerr << "count_of_get_node_in_cache: " << count_of_get_node_in_cache << std::endl;
+        // std::cerr << count_of_get_node_in_cache / (double)count_of_get_node * 100 << " %" << std::endl;
 
-        std::cerr << "size = " << m_size << std::endl;
+        // std::cerr << "size = " << m_size << std::endl;
         
     }
 
@@ -254,10 +253,10 @@ class BPlusTree {
 
 
     BNodePtr get_node(int index) {
-        ++count_of_get_node;
+        // ++count_of_get_node;
         if (cache_map.count(index)) {
             ++count_of_get_node_in_cache;
-            return cache_map.at(index);
+            return cache_map[index];
         }
         shrink_cache();
         // std::cerr << "!!!" << cache_map.size() << std::endl;
@@ -268,7 +267,7 @@ class BPlusTree {
     }
 
     BNodePtr new_node(bool is_inner) {
-        ++count_of_get_node;
+        // ++count_of_get_node;
         shrink_cache();
         BNodePtr p;
         if (m_recycle_head != 0) {
