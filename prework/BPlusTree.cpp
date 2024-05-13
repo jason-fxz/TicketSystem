@@ -58,14 +58,18 @@ inline void quickcopy(Tp *dest, const Tp *src, size_t n) {
 }
 
 // B+ Tree database, Every Key should be unique!!
-template < typename Key, typename Tp, size_t M, size_t L,
+template < typename Key, typename Tp,
            size_t FILE_BLOCK_SIZE = 4096,
            size_t MAX_CACHE_SIZE = 4000,
-           size_t MAX_NODE_SIZE = M,
-           size_t MIN_NODE_SIZE = (M + 1) / 2,
-           size_t MAX_LEAF_SIZE = L,
-           size_t MIN_LEAF_SIZE = (L + 1) / 2 >
+           const bool enable_file_recycle = true,
+           size_t M = (FILE_BLOCK_SIZE + sizeof(Key) - 2 * sizeof(int)) / (sizeof(Key) + sizeof(int)),
+           size_t L = (FILE_BLOCK_SIZE - sizeof(int) * 3) / (sizeof(Key) + sizeof(Tp))
+           >
 class BPlusTree {
+#define MAX_NODE_SIZE M
+#define MIN_NODE_SIZE ((M + 1) / 2)
+#define MAX_LEAF_SIZE L
+#define MIN_LEAF_SIZE ((L + 1) / 2)
     using Data_t = Tp;
     using Key_t = Key;
     using File_t = File<3, FILE_BLOCK_SIZE>;
@@ -183,6 +187,10 @@ class BPlusTree {
             return ptr;
         }
 
+        bool empty() const {
+            return ptr == nullptr;
+        }
+
     };
 
 
@@ -230,13 +238,10 @@ class BPlusTree {
         data_file.write_info(m_size, 2);
         data_file.write_info(m_recycle_head, 3);
         clear_cache();
-
         // std::cerr << "count_of_get_node: " << count_of_get_node << std::endl;
         // std::cerr << "count_of_get_node_in_cache: " << count_of_get_node_in_cache << std::endl;
         // std::cerr << count_of_get_node_in_cache / (double)count_of_get_node * 100 << " %" << std::endl;
-
         // std::cerr << "size = " << m_size << std::endl;
-        
     }
 
   private:
@@ -259,7 +264,6 @@ class BPlusTree {
             return cache_map[index];
         }
         shrink_cache();
-        // std::cerr << "!!!" << cache_map.size() << std::endl;
         BNodePtr p(&data_file, index);
         cache.push(index);
         cache_map.insert({index, p});
@@ -270,12 +274,15 @@ class BPlusTree {
         // ++count_of_get_node;
         shrink_cache();
         BNodePtr p;
-        if (m_recycle_head != 0) {
-            int tmp = m_recycle_head;
-            p = get_node(is_inner ? m_recycle_head : -m_recycle_head);
-            m_recycle_head = p->count;
-            p->set_index(tmp, is_inner);
-        } else {
+        if constexpr(enable_file_recycle) {
+            if (m_recycle_head != 0) {
+                int tmp = m_recycle_head;
+                p = get_node(is_inner ? m_recycle_head : -m_recycle_head);
+                m_recycle_head = p->count;
+                p->set_index(tmp, is_inner);
+            }
+        }
+        if (p.empty()) {
             p = BNodePtr(&data_file, is_inner ? static_cast<node *>(new inner_node) :
                          static_cast<node *>(new leaf_node));
             p->set_index(data_file.write(), is_inner);
@@ -287,8 +294,11 @@ class BPlusTree {
     }
 
     void remove_node(node *p) {
-        p->count = m_recycle_head;
-        m_recycle_head = p->get_index();
+        if constexpr(enable_file_recycle) {
+            std::cerr << "!" << std::endl;
+            p->count = m_recycle_head;
+            m_recycle_head = p->get_index();
+        }
         cache_map.erase(p->index);
     }
 
@@ -297,7 +307,9 @@ class BPlusTree {
                          const int &child) {
         for (int i = count - 1; i > pos; --i) {
             child_list[i + 1] = child_list[i];
-            if (i != 0) key_list[i] = key_list[i - 1];
+        }
+        for (int i = count - 1; i > pos && i > 0; --i) {
+            key_list[i] = key_list[i - 1];
         }
         child_list[pos + 1] = child;
         if (pos >= 0) key_list[pos] = key;
@@ -374,30 +386,37 @@ class BPlusTree {
             inner_node *new_inner = new_node(true).as_inner();
             if (pos < MIN_NODE_SIZE - 1) {
                 // insert key to the left node (inner)
-                for (int i = 0; i < MAX_NODE_SIZE + 1 - MIN_NODE_SIZE; ++i) {
-                    if (i != 0) new_inner->key[i - 1] = inner->key[i + MIN_NODE_SIZE - 2];
-                    new_inner->child[i] = inner->child[i + MIN_NODE_SIZE - 1];
-                }
+                // for (int i = 0; i < MAX_NODE_SIZE + 1 - MIN_NODE_SIZE; ++i) {
+                //     if (i != 0) new_inner->key[i - 1] = inner->key[i + MIN_NODE_SIZE - 2];
+                //     new_inner->child[i] = inner->child[i + MIN_NODE_SIZE - 1];
+                // }
+                quickcopy(new_inner->key, inner->key + MIN_NODE_SIZE - 1, MAX_NODE_SIZE - MIN_NODE_SIZE);
+                quickcopy(new_inner->child, inner->child + MIN_NODE_SIZE - 1, MAX_NODE_SIZE + 1 - MIN_NODE_SIZE);
+
                 upload_key = inner->key[MIN_NODE_SIZE - 2];
                 inner->count = MIN_NODE_SIZE - 1;
                 new_inner->count = MAX_NODE_SIZE + 1 - MIN_NODE_SIZE;
                 insert_valchild(inner->key, inner->child, pos, inner->count, key, child);
             } else if (pos == MIN_NODE_SIZE - 1)  {
                 // insert key to the right node (new_inner)
-                for (int i = 0; i < MAX_NODE_SIZE - MIN_NODE_SIZE; ++i) {
-                    new_inner->key[i] = inner->key[i + MIN_NODE_SIZE - 1];
-                    new_inner->child[i + 1] = inner->child[i + MIN_NODE_SIZE];
-                }
+                // for (int i = 0; i < MAX_NODE_SIZE - MIN_NODE_SIZE; ++i) {
+                //     new_inner->key[i] = inner->key[i + MIN_NODE_SIZE - 1];
+                //     new_inner->child[i + 1] = inner->child[i + MIN_NODE_SIZE];
+                // }
+                quickcopy(new_inner->key, inner->key + MIN_NODE_SIZE - 1, MAX_NODE_SIZE - MIN_NODE_SIZE);
+                quickcopy(new_inner->child + 1, inner->child + MIN_NODE_SIZE, MAX_NODE_SIZE - MIN_NODE_SIZE);
                 new_inner->child[0] = child;
                 upload_key = key;
                 inner->count = MIN_NODE_SIZE;
                 new_inner->count = MAX_NODE_SIZE + 1 - MIN_NODE_SIZE;
             } else {
                 // insert key to the right node (new_inner)
-                for (int i = 0; i < MAX_NODE_SIZE - MIN_NODE_SIZE; ++i) {
-                    if (i != 0) new_inner->key[i - 1] = inner->key[i + MIN_NODE_SIZE - 1];
-                    new_inner->child[i] = inner->child[i + MIN_NODE_SIZE];
-                }
+                // for (int i = 0; i < MAX_NODE_SIZE - MIN_NODE_SIZE; ++i) {
+                //     if (i != 0) new_inner->key[i - 1] = inner->key[i + MIN_NODE_SIZE - 1];
+                //     new_inner->child[i] = inner->child[i + MIN_NODE_SIZE];
+                // }
+                quickcopy(new_inner->key, inner->key + MIN_NODE_SIZE, MAX_NODE_SIZE - MIN_NODE_SIZE - 1);
+                quickcopy(new_inner->child, inner->child + MIN_NODE_SIZE, MAX_NODE_SIZE - MIN_NODE_SIZE);
                 upload_key = inner->key[MIN_NODE_SIZE - 1];
                 inner->count = MIN_NODE_SIZE;
                 new_inner->count = MAX_NODE_SIZE - MIN_NODE_SIZE;
@@ -433,10 +452,12 @@ class BPlusTree {
         if (borrow) { // borrow
             if (left_bro) { // borrow from left bother
                 Left_bro.set_dirty();
-                for (int i = leaf->count; i > 0; --i) {
-                    leaf->key[i] = leaf->key[i - 1];
-                    leaf->data[i] = leaf->data[i - 1];
-                }
+                // for (int i = leaf->count; i > 0; --i) {
+                //     leaf->key[i] = leaf->key[i - 1];
+                //     leaf->data[i] = leaf->data[i - 1];
+                // }
+                quickcopy(leaf->key + 1, leaf->key, leaf->count);
+                quickcopy(leaf->data + 1, leaf->data, leaf->count);
                 leaf->key[0] = left_bro->key[left_bro->count - 1];
                 leaf->data[0] = left_bro->data[left_bro->count - 1];
                 ++leaf->count;
@@ -448,40 +469,51 @@ class BPlusTree {
                 leaf->data[leaf->count] = right_bro->data[0];
                 ++leaf->count;
                 --right_bro->count;
-                for (int i = 0; i < right_bro->count; ++i) {
-                    right_bro->key[i] = right_bro->key[i + 1];
-                    right_bro->data[i] = right_bro->data[i + 1];
-                }
+                // for (int i = 0; i < right_bro->count; ++i) {
+                //     right_bro->key[i] = right_bro->key[i + 1];
+                //     right_bro->data[i] = right_bro->data[i + 1];
+                // }
+                quickcopy(right_bro->key, right_bro->key + 1, right_bro->count);
+                quickcopy(right_bro->data, right_bro->data + 1, right_bro->count);
+
                 father->key[pos] = right_bro->key[0];
             }
         } else { // merge
             if (left_bro) { // merge with left brother
                 Left_bro.set_dirty();
-                for (int i = 0; i < leaf->count; ++i) {
-                    left_bro->key[left_bro->count + i] = leaf->key[i];
-                    left_bro->data[left_bro->count + i] = leaf->data[i];
-                }
+                // for (int i = 0; i < leaf->count; ++i) {
+                //     left_bro->key[left_bro->count + i] = leaf->key[i];
+                //     left_bro->data[left_bro->count + i] = leaf->data[i];
+                // }
+                quickcopy(left_bro->key + left_bro->count, leaf->key, leaf->count);
+                quickcopy(left_bro->data + left_bro->count, leaf->data, leaf->count);
                 left_bro->count += leaf->count;
                 left_bro->next = leaf->next;
                 remove_node(leaf);
-                for (int i = pos; i < father->count - 1; ++i) {
-                    father->key[i - 1] = father->key[i];
-                    father->child[i] = father->child[i + 1];
-                }
+                // for (int i = pos; i < father->count - 1; ++i) {
+                //     father->key[i - 1] = father->key[i];
+                //     father->child[i] = father->child[i + 1];
+                // }
+                quickcopy(father->key + pos - 1, father->key + pos, father->count - pos - 1);
+                quickcopy(father->child + pos, father->child + pos + 1, father->count - pos - 1);
                 --father->count;
             } else { // merge with right brother
                 Right_bro.set_dirty();
-                for (int i = 0; i < right_bro->count; ++i) {
-                    leaf->key[leaf->count + i] = right_bro->key[i];
-                    leaf->data[leaf->count + i] = right_bro->data[i];
-                }
+                // for (int i = 0; i < right_bro->count; ++i) {
+                //     leaf->key[leaf->count + i] = right_bro->key[i];
+                //     leaf->data[leaf->count + i] = right_bro->data[i];
+                // }
+                quickcopy(leaf->key + leaf->count, right_bro->key, right_bro->count);
+                quickcopy(leaf->data + leaf->count, right_bro->data, right_bro->count);
                 leaf->count += right_bro->count;
                 leaf->next = right_bro->next;
                 remove_node(right_bro);
-                for (int i = pos + 1; i < father->count - 1; ++i) {
-                    father->key[i - 1] = father->key[i];
-                    father->child[i] = father->child[i + 1];
-                }
+                // for (int i = pos + 1; i < father->count - 1; ++i) {
+                //     father->key[i - 1] = father->key[i];
+                //     father->child[i] = father->child[i + 1];
+                // }
+                quickcopy(father->key + pos, father->key + pos + 1, father->count - pos - 2);
+                quickcopy(father->child + pos + 1, father->child + pos + 2, father->count - pos - 2);
                 --father->count;
             }
         }
@@ -510,10 +542,12 @@ class BPlusTree {
         if (borrow) {
             if (left_bro) { // borrow from left bother
                 Left_bro.set_dirty();
-                for (int i = inner->count; i > 0; --i) {
-                    if (i > 1) inner->key[i - 1] = inner->key[i - 2];
-                    inner->child[i] = inner->child[i - 1];
-                }
+                // for (int i = inner->count; i > 0; --i) {
+                //     if (i > 1) inner->key[i - 1] = inner->key[i - 2];
+                //     inner->child[i] = inner->child[i - 1];
+                // }
+                quickcopy(inner->key + 1, inner->key, inner->count - 1);
+                quickcopy(inner->child + 1, inner->child, inner->count);
                 inner->key[0] = father->key[pos - 1];
                 inner->child[0] = left_bro->child[left_bro->count - 1];
                 father->key[pos - 1] = left_bro->key[left_bro->count - 2];
@@ -526,41 +560,51 @@ class BPlusTree {
                 father->key[pos] = right_bro->key[0];
                 ++inner->count;
                 --right_bro->count;
-                for (int i = 0; i < right_bro->count; ++i) {
-                    if (i + 1 < right_bro->count) right_bro->key[i] = right_bro->key[i + 1];
-                    right_bro->child[i] = right_bro->child[i + 1];
-                }
+                // for (int i = 0; i < right_bro->count; ++i) {
+                //     if (i + 1 < right_bro->count) right_bro->key[i] = right_bro->key[i + 1];
+                //     right_bro->child[i] = right_bro->child[i + 1];
+                // }
+                quickcopy(right_bro->key, right_bro->key + 1, right_bro->count - 1);
+                quickcopy(right_bro->child, right_bro->child + 1, right_bro->count);
             }
         } else {
             if (left_bro) { // merge with left brother
                 Left_bro.set_dirty();
                 left_bro->key[left_bro->count - 1] = father->key[pos - 1];
                 left_bro->child[left_bro->count] = inner->child[0];
-                for (int i = 1; i < inner->count; ++i) {
-                    left_bro->key[left_bro->count + i - 1] = inner->key[i - 1];
-                    left_bro->child[left_bro->count + i] = inner->child[i];
-                }
+                // for (int i = 1; i < inner->count; ++i) {
+                //     left_bro->key[left_bro->count + i - 1] = inner->key[i - 1];
+                //     left_bro->child[left_bro->count + i] = inner->child[i];
+                // }
+                quickcopy(left_bro->key + left_bro->count, inner->key, inner->count - 1);
+                quickcopy(left_bro->child + left_bro->count + 1, inner->child + 1, inner->count - 1);
                 left_bro->count += inner->count;
                 remove_node(inner);
-                for (int i = pos; i < father->count - 1; ++i) {
-                    father->key[i - 1] = father->key[i];
-                    father->child[i] = father->child[i + 1];
-                }
+                // for (int i = pos; i < father->count - 1; ++i) {
+                //     father->key[i - 1] = father->key[i];
+                //     father->child[i] = father->child[i + 1];
+                // }
+                quickcopy(father->key + pos - 1, father->key + pos, father->count - pos - 1);
+                quickcopy(father->child + pos, father->child + pos + 1, father->count - pos - 1);
                 --father->count;
             } else { // merge with right brother
                 Right_bro.set_dirty();
                 inner->key[inner->count - 1] = father->key[pos];
                 inner->child[inner->count] = right_bro->child[0];
-                for (int i = 1; i < right_bro->count; ++i) {
-                    inner->key[inner->count + i - 1] = right_bro->key[i - 1];
-                    inner->child[inner->count + i] = right_bro->child[i];
-                }
+                // for (int i = 1; i < right_bro->count; ++i) {
+                //     inner->key[inner->count + i - 1] = right_bro->key[i - 1];
+                //     inner->child[inner->count + i] = right_bro->child[i];
+                // }
+                quickcopy(inner->key + inner->count, right_bro->key, right_bro->count - 1);
+                quickcopy(inner->child + inner->count + 1, right_bro->child + 1, right_bro->count - 1);
                 inner->count += right_bro->count;
                 remove_node(right_bro);
-                for (int i = pos + 1; i < father->count - 1; ++i) {
-                    father->key[i - 1] = father->key[i];
-                    father->child[i] = father->child[i + 1];
-                }
+                // for (int i = pos + 1; i < father->count - 1; ++i) {
+                //     father->key[i - 1] = father->key[i];
+                //     father->child[i] = father->child[i + 1];
+                // }
+                quickcopy(father->key + pos, father->key + pos + 1, father->count - pos - 2);
+                quickcopy(father->child + pos + 1, father->child + pos + 2, father->count - pos - 2);
                 --father->count;
             }
         }
@@ -763,18 +807,21 @@ class BPlusTree {
     }
 
 };
-
+#undef MAX_NODE_SIZE
+#undef MIN_NODE_SIZE
+#undef MAX_LEAF_SIZE
+#undef MIN_LEAF_SIZE
 
 }
 
 typedef int Value_t;
-typedef uint64_t Key_t;
+typedef size_t Key_t;
 
-template<uint64_t MOD = 1019260817, uint64_t BASE = 257>
+template<size_t MOD = 1019260817, size_t BASE = 257>
 class stringhash {
   public:
-    uint64_t operator()(const std::string &str) const {
-        uint64_t hash = 0;
+    size_t operator()(const std::string &str) const {
+        size_t hash = 0;
         for (int i = 0; i < str.size(); ++i) {
             hash = (hash * BASE + str[i]) % MOD;
         }
@@ -787,8 +834,7 @@ Value_t fuckyou[300000];
 using namespace sjtu;
 int main() {
     // BPlusTree<pair<Key_t, Value_t>, Value_t, 5, 5> bpt("data_file.db");
-    BPlusTree<pair<Key_t, Value_t>, Value_t, 205, 204, 4096, 3000>
-    bpt("data_file.db");
+    BPlusTree<pair<Key_t, Value_t>, Value_t, 4096, 1000, false> bpt("data_file.db");
     std::cin.tie(0);
     std::cout.tie(0);
     std::ios::sync_with_stdio(0);
