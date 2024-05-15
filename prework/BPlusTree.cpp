@@ -9,49 +9,6 @@
 namespace sjtu {
 
 
-
-template <class Tp, size_t MAX_SIZE>
-class queue {
-  private:
-    Tp data[MAX_SIZE];
-    size_t head, tail, m_size;
-  public:
-    queue() : head(0), tail(0), m_size(0) {}
-    ~queue() = default;
-
-    void clear() {
-        head = tail = m_size = 0;
-    }
-
-    void push(const Tp &value) {
-        data[tail] = value;
-        tail = (tail + 1) % MAX_SIZE;
-        ++m_size;
-    }
-
-    void pop() {
-        head = (head + 1) % MAX_SIZE;
-        --m_size;
-    }
-
-    Tp front() const {
-        return data[head];
-    }
-
-    Tp back() const {
-        return data[(tail - 1 + MAX_SIZE) % MAX_SIZE];
-    }
-
-    size_t size() const {
-        return m_size;
-    }
-
-    bool empty() const {
-        return m_size == 0;
-    }
-};
-
-
 template <typename Tp>
 inline void quickcopy(Tp *dest, const Tp *src, size_t n) {
     // memmove(dest, src, n * sizeof(Tp));
@@ -208,8 +165,7 @@ class BPlusTree {
     int m_recycle_head; // head of the recycle list
     File_t data_file;
 
-    queue < int, MAX_CACHE_SIZE + 2 > cache;
-    Hashmap<int, BNodePtr, 2999> cache_map;
+    LRUHashmap<int, BNodePtr, 2999> cache_map;
 
 
     // for debug
@@ -219,7 +175,6 @@ class BPlusTree {
   public:
 
     void init_cache() {
-        cache.clear();
         cache_map.clear();
     }
 
@@ -255,27 +210,18 @@ class BPlusTree {
 
   private:
     void shrink_cache() {
-        while (cache.size() >= MAX_CACHE_SIZE) {
-            int i = cache.front();
-            cache.pop();
-            if (cache_map.count(i)) {
-                cache_map.erase(i);
-            }
+        while (cache_map.size() >= MAX_CACHE_SIZE) {
+            cache_map.pop_back();
         }
     }
 
-
-
     BNodePtr get_node(int index) {
         // ++count_of_get_node;
-        if (cache_map.count(index)) {
-            ++count_of_get_node_in_cache;
-            return cache_map[index];
+        BNodePtr &p = cache_map.at(index);
+        if (p.empty()) {
+            p = BNodePtr(&data_file, index);
         }
         shrink_cache();
-        BNodePtr p(&data_file, index);
-        cache.push(index);
-        cache_map.insert({index, p});
         return p;
     }
 
@@ -295,8 +241,7 @@ class BPlusTree {
             p = BNodePtr(&data_file, is_inner ? static_cast<node *>(new inner_node) :
                          static_cast<node *>(new leaf_node));
             p->set_index(data_file.write(), is_inner);
-            cache.push(p->index);
-            cache_map.insert({p->index, p});
+            cache_map.insert(p->index, p);
         }
         p.set_dirty();
         return p;
@@ -304,7 +249,7 @@ class BPlusTree {
 
     void remove_node(node *p) {
         if constexpr(enable_file_recycle) {
-            std::cerr << "!" << std::endl;
+            // std::cerr << "!" << std::endl;
             p->count = m_recycle_head;
             m_recycle_head = p->get_index();
         }
@@ -843,7 +788,7 @@ Value_t fuckyou[300000];
 using namespace sjtu;
 int main() {
     // BPlusTree<pair<Key_t, Value_t>, Value_t, 5, 5> bpt("data_file.db");
-    BPlusTree<pair<Key_t, Value_t>, Value_t, 4096, 1000, false> bpt("data_file.db");
+    BPlusTree<pair<Key_t, Value_t>, Value_t, 4096, 10000, false> bpt("data_file.db");
     std::cin.tie(0);
     std::cout.tie(0);
     std::ios::sync_with_stdio(0);
