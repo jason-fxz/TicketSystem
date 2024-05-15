@@ -54,7 +54,16 @@ class queue {
 
 template <typename Tp>
 inline void quickcopy(Tp *dest, const Tp *src, size_t n) {
-    memmove(dest, src, n * sizeof(Tp));
+    // memmove(dest, src, n * sizeof(Tp));
+    if (dest < src) {
+        for (int i = 0; i < n; ++i) {
+            dest[i] = src[i];
+        }
+    } else {
+        for (int i = (int)n - 1; i >= 0; --i) {
+            dest[i] = src[i];
+        }
+    }
 }
 
 // B+ Tree database, Every Key should be unique!!
