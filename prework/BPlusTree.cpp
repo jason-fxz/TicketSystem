@@ -788,7 +788,7 @@ Value_t fuckyou[300000];
 using namespace sjtu;
 int main() {
     // BPlusTree<pair<Key_t, Value_t>, Value_t, 5, 5> bpt("data_file.db");
-    BPlusTree<pair<Key_t, Value_t>, Value_t, 4096, 10000, false> bpt("data_file.db");
+    BPlusTree<pair<Key_t, Value_t>, Value_t, 4096, 10000, true> bpt("data_file.db");
     std::cin.tie(0);
     std::cout.tie(0);
     std::ios::sync_with_stdio(0);
