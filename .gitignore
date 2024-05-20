@@ -33,6 +33,7 @@
 
 # datafile
 *.db
+*.dat
 *.txt
 !CMakeLists.txt
 *.bak
@@ -41,3 +42,4 @@
 .cache/*
 .vscode/*
 build/*
+*.log

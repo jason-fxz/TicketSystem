@@ -4,9 +4,9 @@
  * @brief Hashmap and LRUHashmap class
  * @version 0.1
  * @date 2024-05-12
- * 
+ *
  * @copyright Copyright (c) 2024
- * 
+ *
  */
 
 #ifndef HASHMAP_HPP
@@ -30,8 +30,9 @@ namespace sjtu {
  */
 template <class Key, class Tp, size_t MOD, class Hash = std::hash<Key>>
 class Hashmap {
-  private:
+  public:
     typedef std::pair<const Key, Tp> Data_t;
+  private:
     /**
      * @brief Node structure for storing key-value pairs.
      */
@@ -152,7 +153,7 @@ class Hashmap {
         return 0;
     }
 
-    
+
     /**
      * @brief Inserts a new key-value pair into the hash map.
      * If the key already exists, the function does nothing.
@@ -205,7 +206,7 @@ class LRUHashmap {
         data_t data;       ///< The key-value pair.
         node  *next;       ///< Pointer to the next node in the chain.
         node  *list_next;
-        node  *list_prev; 
+        node  *list_prev;
     };
     node *m_data[MOD];     ///< Array of pointers to the head of each chain.
     node *m_list_head, *m_list_tail;
