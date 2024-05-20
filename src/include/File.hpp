@@ -214,7 +214,6 @@ public:
         }
     }
     ~DataFile() {
-        FILE::~FILE();
     }
     void read(Tp &t, const int index) {
         FILE::read(t, index);
