@@ -3,7 +3,7 @@
 bool Run() {
     sjtu::TicketSystem luowen;
     int r = 0;
-    while ((r = luowen.NextCMD()) == 0) std::fflush(stdout);
+    while ((r = luowen.NextCMD()) == 0) ;
     return r == 2; // for clean
 }
 

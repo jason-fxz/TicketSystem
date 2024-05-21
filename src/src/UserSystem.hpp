@@ -17,7 +17,7 @@ struct Empty {};
 class UserSystem {
     HashMapFile<size_t, User, 20023> Users;
     Hashmap<size_t, Empty, 20023> loginUsers;
-    BPlusTree<pair<size_t, int>, int> UserOrders;
+    BPlusTree<pair<size_t, int>, int, 4096, 200000> UserOrders;
 
     User tmpUser;
 

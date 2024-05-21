@@ -21,8 +21,8 @@ class TrainSystem {
 
     DataFile<Train> TrainsData; // TrainIndex -> Train
     DataFile<Seats> SeatsData;  // SeatIndex -> Seats
-    BPlusTree<pair<size_t, int>, pair<int, int>> StationMap;  // stationName_hash -> (TrainIndex, SeatsIndex)
-    BPlusTree<pair<TrainUnit, int>, int, 4096, 10000> TrainUnitMap; // TrainUnit -> OrderIndex
+    BPlusTree<pair<size_t, int>, pair<int, int>, 4096 * 2> StationMap;  // stationName_hash -> (TrainIndex, SeatsIndex)
+    BPlusTree<pair<TrainUnit, int>, int, 4096 * 2, 20000> TrainUnitMap; // TrainUnit -> OrderIndex
     DataFile<Order, sizeof(Order)> OrdersData; // OrderIndex -> Order
 
     Train tmpTrain;
@@ -134,14 +134,13 @@ class TrainSystem {
 
 
     // [SF] query_ticket -s -t -d (-p time)
-    vector<TrainPreview> query_ticket(const char *_s, const char *_t, const char *_d, const char *_p) {
-        vector<TrainPreview> res;
+    void query_ticket(vector<TrainPreview> &res, const char *_s, const char *_t, const char *_d, const char *_p) {
         datetime_t departingDate = datetime_t(_d, 1) + datetime_t("23:59", 2);
         vector<pair<int, int>> indexs;
         auto hash_s = string_hash(_s);
         auto hash_t = string_hash(_t);
         StationMap.search(pair(hash_s, 0), pair(hash_s, 0x3f3f3f3f), indexs);
-        for (auto index : indexs) {
+        for (const auto &index : indexs) {
             TrainsData.read(tmpTrain, index.first);
             pair<int, int> stationIndex = tmpTrain.GetStationIndex(_s, _t);
             if (stationIndex.first == -1 || stationIndex.second == -1 || stationIndex.first > stationIndex.second) continue;
@@ -173,7 +172,6 @@ class TrainSystem {
                        (a.arrivingTime - a.leavingTime) < (b.arrivingTime - b.leavingTime) : a.trainID < b.trainID;
             });
         }
-        return std::move(res);
     }
 
     // [N] query_transfer -s -t -d (-p time)
@@ -210,7 +208,7 @@ class TrainSystem {
                     tttt.seatCount1 = std::min(tttt.seatCount1, tmpSeats.count[train1_dep.getDDate()][j]);
                 }
                 tttt.mid = tmpTrain.stations[i];
-                indexs2.clear();
+                indexs2.cclear();
                 auto hash_m = string_hash(tmpTrain.stations[i]);
                 StationMap.search(pair(hash_m, 0), pair(hash_m, 0x3f3f3f3f), indexs2);
                 for (auto index2 : indexs2) {

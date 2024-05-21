@@ -100,13 +100,16 @@ class TicketSystem : command_helper, TrainSystem, UserSystem {
         }
     }
 
+    vector<TrainPreview> res;
     void query_ticket() {
-        auto tmp = TrainSystem::query_ticket(arg('s'), arg('t'), arg('d'), arg('p'));
-        printf("%d\n", (int)tmp.size());
-        for (int i = 0; i < tmp.size(); ++i) {
-            printf("%s %s %s -> %s %s %d %d\n", tmp[i].trainID.c_str(), tmp[i].from.c_str(), tmp[i].leavingTime.toString().c_str(),
-                   tmp[i].to.c_str(),
-                   tmp[i].arrivingTime.toString().c_str(), tmp[i].price, tmp[i].seatCount);
+        res.clear();
+        res.reserve(1145);
+        TrainSystem::query_ticket(res, arg('s'), arg('t'), arg('d'), arg('p'));
+        printf("%d\n", (int)res.size());
+        for (int i = 0; i < res.size(); ++i) {
+            printf("%s %s %s -> %s %s %d %d\n", res[i].trainID.c_str(), res[i].from.c_str(), res[i].leavingTime.toString().c_str(),
+                   res[i].to.c_str(),
+                   res[i].arrivingTime.toString().c_str(), res[i].price, res[i].seatCount);
         }
     }
 

@@ -263,7 +263,7 @@ class vector {
      *
      */
     ~vector() {
-        clear();
+        cclear();
     }
     /**
      * @brief assign operator
@@ -274,7 +274,7 @@ class vector {
      */
     vector &operator=(const vector &other) {
         if (this == &other) return *this;
-        clear();
+        cclear();
         _m_data = _alloc.allocate(other._m_cap);
         _m_size = other._m_size;
         _m_cap = other._m_cap;
@@ -292,7 +292,7 @@ class vector {
      */
     vector &operator=(vector &&other) {
         if (this == &other) return *this;
-        clear();
+        cclear();
         _m_data = other._m_data;
         _m_size = other._m_size;
         _m_cap = other._m_cap;
@@ -429,9 +429,9 @@ class vector {
         return _m_cap;
     }
     /**
-     * clears the contents
+     * clears the contents and capacity of the vector.
      */
-    void clear() {
+    void cclear() {
         if (_m_data == nullptr) return;
         for (int i = 0; i < _m_size; ++i) {
             std::destroy_at(_m_data + i);
@@ -440,6 +440,16 @@ class vector {
         _m_data = nullptr;
         _m_size = 0;
         _m_cap = 0;
+    }
+    /**
+     *  Just clear the contents of the vector.
+     */
+    void clear() {
+        if (_m_data == nullptr) return;
+        for (int i = 0; i < _m_size; ++i) {
+            std::destroy_at(_m_data + i);
+        }
+        _m_size = 0;
     }
     /**
      * @brief inserts value before pos
