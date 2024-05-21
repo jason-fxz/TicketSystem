@@ -19,11 +19,10 @@ class TrainSystem {
 
     BPlusTree<size_t, TrainState> TrainsStates; // trainID_hash -> TrainState
 
-
     DataFile<Train> TrainsData; // TrainIndex -> Train
     DataFile<Seats> SeatsData;  // SeatIndex -> Seats
     BPlusTree<pair<size_t, int>, pair<int, int>> StationMap;  // stationName_hash -> (TrainIndex, SeatsIndex)
-    BPlusTree<pair<TrainUnit, int>, int> TrainUnitMap; // TrainUnit -> OrderIndex
+    BPlusTree<pair<TrainUnit, int>, int, 4096, 10000> TrainUnitMap; // TrainUnit -> OrderIndex
     DataFile<Order, sizeof(Order)> OrdersData; // OrderIndex -> Order
 
     Train tmpTrain;

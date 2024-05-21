@@ -20,7 +20,7 @@ namespace sjtu {
 typedef String<21> username_t;
 typedef String<31> password_t;
 typedef String<16> name_t;
-typedef String<31> mailAddr_t;
+typedef String<32> mailAddr_t;
 typedef char       privilege_t;
 
 

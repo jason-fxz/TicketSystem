@@ -14,7 +14,7 @@ struct User {
     mailAddr_t  mail;  ///< mail address
     privilege_t priv;  ///< privilege
     
-
+    
 
     User() = default;
 
