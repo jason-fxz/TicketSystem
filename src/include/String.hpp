@@ -4,9 +4,9 @@
  * @brief a simple fix-length string class
  * @version 1.0
  * @date 2024-05-12
- * 
+ *
  * @copyright Copyright (c) 2024
- * 
+ *
  */
 
 #ifndef __STRING_HPP
@@ -20,7 +20,7 @@ namespace sjtu {
 
 /**
  * @brief a simple fix-length char[] string class
- * 
+ *
  * @tparam len the length of the string
  */
 template <size_t len>
@@ -30,36 +30,36 @@ class String {
   public:
     /**
      * @brief Construct a new String object
-     * 
+     *
      */
     String() { memset(data, 0, sizeof(data)); }
     /**
      * @brief Construct a new String object from a c-style string
-     * 
-     * @param str 
+     *
+     * @param str
      */
     String(const char *str) {
         strcpy(data, str);
     }
     /**
      * @brief Construct a new String object from another String object
-     * 
-     * @param other 
+     *
+     * @param other
      */
     String(const String &other) {
         memcpy(data, other.data, sizeof(data));
     }
     /**
      * @brief Destroy the String object
-     * 
+     *
      */
     ~String() = default;
 
     /**
      * @brief copy the data from another String object
-     * 
-     * @param other 
-     * @return String& 
+     *
+     * @param other
+     * @return String&
      */
     String &operator=(const String &other) {
         if (this == &other) return *this;
@@ -69,9 +69,9 @@ class String {
 
     /**
      * @brief assign the data from a c-style string
-     * 
-     * @param str 
-     * @return String& 
+     *
+     * @param str
+     * @return String&
      */
     String &operator=(const char *str) {
         memset(data, 0, sizeof(data));
@@ -85,7 +85,7 @@ class String {
     bool operator==(const String &rhs) const {
         return strcmp(data, rhs.data) == 0;
     }
-    
+
     /**
      * operator to campare two strings in lexicographical order
      */
@@ -129,16 +129,16 @@ class String {
         return data;
     }
 
-    
+
     /**
-     * ostream operator to print the string 
+     * ostream operator to print the string
      */
     friend std::ostream &operator<<(std::ostream &os, const String &str) {
         os << str.data;
         return os;
     }
 
-    /** 
+    /**
      * istream operator to read the string
     */
     friend std::istream &operator>>(std::istream &is, String &str) {
@@ -146,19 +146,39 @@ class String {
         return is;
     }
 };
+const size_t RANDDOM_HASH_SEED = 114514998244353ll;
+size_t string_hash(const char *str) {
+    size_t hash = RANDDOM_HASH_SEED;
+    for (int i = 0; str[i]; i++) {
+        hash = hash * 131 + str[i];
+    }
+    return hash;
+}
+
+template <size_t len>
+size_t string_hash(String<len> str) {
+    size_t hash = RANDDOM_HASH_SEED;
+    for (int i = 0; str[i]; i++) {
+        hash = hash * 131 + str[i];
+    }
+    return hash;
+}
 
 } // namespace sjtu
 
 namespace std {
-    template <size_t len>
-    struct hash<sjtu::String<len>> {
-        size_t operator()(const sjtu::String<len>& str) const {
-            size_t hash = 0;            
-            for (int i = 0; i < len && str[i]; i++) {
-                hash = hash * 131 + str[i];
-            }
-            return hash;
+/**
+ * hash function for the String class
+ */
+template <size_t len>
+struct hash<sjtu::String<len>> {
+    size_t operator()(const sjtu::String<len> &str) const {
+        size_t hash = sjtu::RANDDOM_HASH_SEED;
+        for (int i = 0; i < len && str[i]; i++) {
+            hash = hash * 131 + str[i];
         }
-    };
+        return hash;
+    }
+};
 }
 #endif // __STRING_HPP

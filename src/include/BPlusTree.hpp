@@ -15,7 +15,7 @@ namespace sjtu {
 // B+ Tree database, Every Key should be unique!!
 template < typename Key, typename Tp,
            size_t FILE_BLOCK_SIZE = 4096,
-           size_t MAX_CACHE_SIZE = 4000,
+           size_t MAX_CACHE_SIZE = 1000,
            const bool enable_file_recycle = true,
            size_t M = (FILE_BLOCK_SIZE + sizeof(Key) - 2 * sizeof(int)) / (sizeof(Key) + sizeof(int)),
            size_t L = (FILE_BLOCK_SIZE - sizeof(int) * 3) / (sizeof(Key) + sizeof(Tp))

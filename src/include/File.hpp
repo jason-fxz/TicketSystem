@@ -4,9 +4,9 @@
  * @brief File class template
  * @version 1.0
  * @date 2024-05-11
- * 
+ *
  * @copyright Copyright (c) 2024
- * 
+ *
  */
 
 #ifndef __FILE_HPP
@@ -15,13 +15,17 @@
 #include <cstddef>
 #include <fstream>
 #include <cstring>
+#include "Vector.hpp"
+#include "Hashmap.hpp"
+
+namespace sjtu {
 
 /**
  * @brief A class template for file handling.
- * 
+ *
  * This class provides functionality for creating, opening, reading, and writing to files.
  * It supports storing intergers as head information and writing blocks of data to the file.
- * 
+ *
  * @tparam info_len The number of integers to store as information.
  * @tparam BLOCK_SIZE The size of each block in bytes. Default is 4096.
  */
@@ -35,7 +39,7 @@ class File {
   public:
     /**
      * @brief Default constructor.
-     * 
+     *
      * Initializes the buffer and ensures that the size of the information buffer is within the block size limit.
      */
     File() {
@@ -45,9 +49,9 @@ class File {
 
     /**
      * @brief Constructor with file name parameter.
-     * 
+     *
      * Initializes the buffer, sets the file name, and ensures that the size of the information buffer is within the block size limit.
-     * 
+     *
      * @param file_name The name of the file.
      */
     File(const std::string &file_name) : file_name(file_name) {
@@ -57,7 +61,7 @@ class File {
 
     /**
      * @brief Destructor.
-     * 
+     *
      * Writes the information buffer to the file and closes the file stream.
      */
     ~File() {
@@ -68,10 +72,10 @@ class File {
 
     /**
      * @brief Initializes the file.
-     * 
+     *
      * Creates a new file if it does not exist or clears the existing file.
      * If a file name is provided, it updates the file name.
-     * 
+     *
      * @param FN The name of the file (optional).
      */
     void init(std::string FN = "") {
@@ -85,7 +89,7 @@ class File {
 
     /**
      * @brief Checks if the file exists.
-     * 
+     *
      * @return True if the file exists, false otherwise.
      */
     bool exist() {
@@ -97,10 +101,10 @@ class File {
 
     /**
      * @brief Opens the file.
-     * 
+     *
      * If a file name is provided, it updates the file name.
      * Opens the file in read and write mode and reads the information buffer.
-     * 
+     *
      * @param FN The name of the file (optional).
      */
     void open(std::string FN = "") {
@@ -112,9 +116,9 @@ class File {
 
     /**
      * @brief Retrieves the value of the nth integer in the information buffer.
-     * 
+     *
      * The index is 1-based.
-     * 
+     *
      * @param tmp The variable to store the retrieved value.
      * @param n The index of the integer to retrieve.
      */
@@ -126,9 +130,9 @@ class File {
 
     /**
      * @brief Writes the value of tmp to the nth integer in the information buffer.
-     * 
+     *
      * The index is 1-based.
-     * 
+     *
      * @param tmp The value to write.
      * @param n The index of the integer to write.
      */
@@ -140,9 +144,9 @@ class File {
 
     /**
      * @brief Writes a block to the file and returns the index of the block.
-     * 
+     *
      * The function seeks to the end of the file, writes the buffer to the file, and returns the index of the block.
-     * 
+     *
      * @return The index of the block.
      */
     int write() {
@@ -155,7 +159,7 @@ class File {
 
     /**
      * @brief Writes the value of t to a block in the file and returns the index of the block.
-     * 
+     *
      * @tparam T The type of the object.
      * @param t The value to write
      * @return The index of the block.
@@ -171,9 +175,9 @@ class File {
 
     /**
      * @brief Updates the object at the specified index with the value of t.
-     * 
+     *
      * The index should be obtained from the write() function.
-     * 
+     *
      * @tparam T The type of the object.
      * @param t The value to update the object with.
      * @param index The index of the object.
@@ -186,9 +190,9 @@ class File {
 
     /**
      * @brief Reads the value of the object at the specified index and assigns it to t.
-     * 
+     *
      * The index should be obtained from the write() function.
-     * 
+     *
      * @tparam T The type of the object.
      * @param t The variable to store the retrieved value.
      * @param index The index of the object.
@@ -202,10 +206,10 @@ class File {
 };
 
 
-template<class Tp, size_t BLOCK_SIZE = (sizeof(Tp) + 4095) / 4096 * 4096>
+template < class Tp, size_t BLOCK_SIZE = (sizeof(Tp) + 4095) / 4096 * 4096 >
 class DataFile : public File<0, BLOCK_SIZE> {
     using FILE = File<0, BLOCK_SIZE>;
-public:
+  public:
     DataFile(const std::string &file_name) : FILE(file_name + ".dat") {
         if (FILE::exist()) {
             FILE::open();
@@ -230,6 +234,84 @@ public:
 
 
 };
+
+
+template<class Tp>
+class VectorFile : public vector<Tp> {
+  private:
+    std::fstream file;
+  public:
+    VectorFile(std::string path) {
+        file.open(path, std::ios::in | std::ios::out | std::ios::binary);
+        if (!file.good()) {
+            file.close();
+            // init
+            file.open(path, std::ios::out | std::ios::binary);
+        } else {
+            // read from memory
+            file.seekg(0);
+            size_t count;
+            file.read(reinterpret_cast<char *>(&count), sizeof(size_t));
+            this->reserve(count * 1.2);
+            this->resize(count);
+            file.read(reinterpret_cast<char *>(this->data()), count * sizeof(Tp));
+        }
+    }
+
+    ~VectorFile() {
+        file.seekp(0);
+        size_t count = this->size();
+        file.write(reinterpret_cast<const char *>(&count), sizeof(size_t));
+        file.write(reinterpret_cast<const char *>(this->data()), this->size() * sizeof(Tp));
+        file.close();
+    }
+};
+
+template<class Key, class Tp, size_t MOD>
+class HashMapFile : public Hashmap<Key, Tp, MOD> {
+  private:
+    std::fstream file;
+  public:
+    typedef Hashmap<Key, Tp, MOD> HashMap;
+    typedef pair<Key, Tp> Data_t;
+    HashMapFile(std::string path) {
+        file.open(path, std::ios::in | std::ios::out | std::ios::binary);
+        if (!file.good()) {
+            file.close();
+            // init
+            file.open(path, std::ios::out | std::ios::binary);
+        } else {
+            // read from memory
+            file.seekg(0);
+            size_t count;
+            file.read(reinterpret_cast<char *>(&count), sizeof(size_t));
+            vector<Data_t> tmp;
+            tmp.resize(count);
+            file.read(reinterpret_cast<char *>(tmp.data()), count * sizeof(Data_t));
+            for (const auto &i : tmp) {
+                this->insert(i);
+            }
+        }
+    }
+    ~HashMapFile() {
+        vector<Data_t> tmp;
+        tmp.reserve(this->size());
+        for (size_t i = 0; i < MOD; ++i) {
+            auto p = HashMap::m_data[i];
+            while (p) {
+                tmp.push_back(p->data);
+                p = p->next;
+            }
+        }
+        size_t count = tmp.size();
+        file.seekp(0);
+        file.write(reinterpret_cast<const char *>(&count), sizeof(size_t));
+        file.write(reinterpret_cast<const char *>(tmp.data()), tmp.size() * sizeof(Data_t));
+        file.close();
+    }
+};
+
+}
 
 
 #endif // __FILE_HPP

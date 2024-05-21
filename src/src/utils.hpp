@@ -17,17 +17,17 @@ namespace sjtu {
 
 
 
-typedef String<22> username_t;
-typedef String<22> password_t;
+typedef String<21> username_t;
+typedef String<31> password_t;
 typedef String<16> name_t;
-typedef String<32> mailAddr_t;
+typedef String<31> mailAddr_t;
 typedef char       privilege_t;
 
 
 const int maxSTATION = 100;
 const int maxDURATION = 92; // 6-1 ~ 8-31
-typedef String<22> trainID_t;
-typedef String<32> stationName_t;
+typedef String<21> trainID_t;
+typedef String<31> stationName_t;
 typedef int number_t; // use for stationNum / seatNum
 typedef int price_t;
 typedef short mytime_t;

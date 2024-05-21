@@ -31,8 +31,8 @@ namespace sjtu {
 template <class Key, class Tp, size_t MOD, class Hash = std::hash<Key>>
 class Hashmap {
   public:
-    typedef std::pair<const Key, Tp> Data_t;
-  private:
+    typedef pair<const Key, Tp> Data_t;
+  protected:
     /**
      * @brief Node structure for storing key-value pairs.
      */

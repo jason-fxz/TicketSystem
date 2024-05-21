@@ -4,9 +4,9 @@
  * @brief implement a container like std::vector
  * @version 0.1
  * @date 2024-05-12
- * 
+ *
  * @copyright Copyright (c) 2024
- * 
+ *
  */
 #ifndef SJTU_VECTOR_HPP
 #define SJTU_VECTOR_HPP
@@ -33,7 +33,7 @@ class vector {
     static constexpr double MULTIPLIER = 2; ///< The multiplier for capacity growth.
     T *_m_data; ///< The pointer to the data array.
     size_t _m_size; ///< The number of elements in the vector.
-    size_t _m_cap;  ///< The capacity of the vector. 
+    size_t _m_cap;  ///< The capacity of the vector.
     std::allocator<T> _alloc; ///< The allocator for memory management.
 
   public:
@@ -218,7 +218,7 @@ class vector {
         bool operator!=(const const_iterator &rhs) const {
             return _m_cptr != rhs._m_cptr;
         }
-         bool operator<(const iterator &rhs) const {
+        bool operator<(const iterator &rhs) const {
             return _m_cptr < rhs._m_ptr;
         }
         bool operator<(const const_iterator &rhs) const {
@@ -228,13 +228,13 @@ class vector {
     };
     /**
      * @brief Construct a new vector object
-     * 
+     *
      */
     vector() : _m_data(nullptr), _m_cap(0), _m_size(0) {}
     /**
      * @brief Construct a new vector object by copying another vector
-     * 
-     * @param other 
+     *
+     * @param other
      */
     vector(const vector &other) {
         _m_data = _alloc.allocate(other._m_cap);
@@ -247,8 +247,8 @@ class vector {
 
     /**
      * @brief Construct a new vector object by moving another vector
-     * 
-     * @param other 
+     *
+     * @param other
      */
     vector(vector &&other) {
         _m_data = other._m_data;
@@ -260,7 +260,7 @@ class vector {
     }
     /**
      * @brief Destroy the vector object
-     * 
+     *
      */
     ~vector() {
         clear();
@@ -268,9 +268,9 @@ class vector {
     /**
      * @brief assign operator
      * clear current vector and assign new vector by copying other
-     * 
-     * @param other 
-     * @return vector& 
+     *
+     * @param other
+     * @return vector&
      */
     vector &operator=(const vector &other) {
         if (this == &other) return *this;
@@ -286,9 +286,9 @@ class vector {
     /**
      * @brief assign operator
      * clear current vector and assign new vector by moving other
-     * 
-     * @param other 
-     * @return vector& 
+     *
+     * @param other
+     * @return vector&
      */
     vector &operator=(vector &&other) {
         if (this == &other) return *this;
@@ -307,7 +307,7 @@ class vector {
      * It will check whether pos is in [0, size) and throw index_out_of_bound if not.
      * @param pos the position of the element to be assigned
      * @throw index_out_of_bound if pos is not in [0, size)
-     * @return T& 
+     * @return T&
      */
     T &at(const size_t &pos) {
         if (pos < 0 || pos >= _m_size) throw index_out_of_bound();
@@ -318,7 +318,7 @@ class vector {
      * It will check whether pos is in [0, size) and throw index_out_of_bound if not.
      * @param pos the position of the element to be assigned
      * @throw index_out_of_bound if pos is not in [0, size)
-     * @return const T& 
+     * @return const T&
      */
     const T &at(const size_t &pos) const {
         if (pos < 0 || pos >= _m_size) throw index_out_of_bound();
@@ -327,8 +327,8 @@ class vector {
     /**
      * @brief access specified element without bounds checking
      * It will not check whether pos is in [0, size), so it may cause segmentation fault.
-     * @param pos 
-     * @return T& 
+     * @param pos
+     * @return T&
      */
     T &operator[](const size_t &pos) {
         return at(pos);
@@ -336,15 +336,15 @@ class vector {
     /**
      * @brief access specified element without bounds checking (const version)
      * It will not check whether pos is in [0, size), so it may cause segmentation fault.
-     * @param pos 
-     * @return const T& 
+     * @param pos
+     * @return const T&
      */
     const T &operator[](const size_t &pos) const {
         return at(pos);
     }
     /**
      * @brief access the first element.
-     * 
+     *
      * @throw container_is_empty if size == 0
      * @return const T& the first element
      */
@@ -354,7 +354,7 @@ class vector {
     }
     /**
      * @brief access the last element.
-     * 
+     *
      * @throw container_is_empty if size == 0
      * @return const T& the last element
      */
@@ -364,48 +364,48 @@ class vector {
     }
     /**
      * @brief returns an iterator to the beginning.
-     * 
-     * @return iterator 
+     *
+     * @return iterator
      */
     iterator begin() {
         return iterator(_m_data, this);
     }
     /**
      * @brief returns an const_iterator to the beginning.
-     * 
-     * @return const_iterator 
+     *
+     * @return const_iterator
      */
     const_iterator begin() const {
         return const_iterator(_m_data, this);
     }
     /**
      * @brief returns an const_iterator to the beginning.
-     * 
-     * @return const_iterator 
+     *
+     * @return const_iterator
      */
     const_iterator cbegin() const {
         return const_iterator(_m_data, this);
     }
     /**
      * @brief returns an iterator to the end.
-     * 
-     * @return iterator 
+     *
+     * @return iterator
      */
     iterator end() {
         return iterator(_m_data + _m_size, this);
     }
     /**
      * @brief returns an const_iterator to the end.
-     * 
-     * @return const_iterator 
+     *
+     * @return const_iterator
      */
     const_iterator end() const {
         return const_iterator(_m_data + _m_size, this);
     }
     /**
      * @brief returns an const_iterator to the end.
-     * 
-     * @return const_iterator 
+     *
+     * @return const_iterator
      */
     const_iterator cend() const {
         return const_iterator(_m_data + _m_size, this);
@@ -534,10 +534,63 @@ class vector {
     }
 
     /**
+     * @brief Resize the container to contain n elements.
+     * if n > size(), the new elements will be initialized with value.
+     * if n < size(), the container will be destroyed.
+     */
+    void resize(size_t n, const T &value) {
+        if (n < _m_size) {
+            for (size_t i = n; i < _m_size; ++i) {
+                std::destroy_at(_m_data + i);
+            }
+            _m_size = n;
+        } else if (n > _m_size) {
+            _grow_capacity_until(n);
+            for (size_t i = _m_size; i < n; ++i) {
+                std::construct_at(_m_data + i, value);
+            }
+            _m_size = n;
+        }
+    }
+
+    /**
+     * @brief Resize the container to contain n elements.
+     * if n > size(), the new elements will be default initialized.
+     * if n < size(), the container will be destroyed.
+     */
+    void resize(size_t n) {
+        if (n < _m_size) {
+            for (size_t i = n; i < _m_size; ++i) {
+                std::destroy_at(_m_data + i);
+            }
+            _m_size = n;
+        } else if (n > _m_size) {
+            _grow_capacity_until(n);
+            for (size_t i = _m_size; i < n; ++i) {
+                std::construct_at(_m_data + i, T());
+            }
+            _m_size = n;
+        }
+    }
+
+    /**
      * Shrink the capacity to fit the size.
      */
     void shrink_to_fit() {
         _shrink_capacity_until(_m_size);
+    }
+
+    /**
+     * @brief Get the data pointer. 
+     */
+    T *data() {
+        return _m_data;
+    }
+    /**
+     * @brief Get the data pointer. 
+     */
+    const T *data() const {
+        return _m_data;
     }
 
   private:

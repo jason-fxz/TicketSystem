@@ -14,7 +14,11 @@
 namespace sjtu {
 
 class TrainSystem {
-    BPlusTree<trainID_t, TrainState> TrainsStates; // trainID -> TrainState
+    // BPlusTree<trainID_t, TrainState> TrainsStates; // trainID -> TrainState
+
+    BPlusTree<size_t, TrainState> TrainsStates; // trainID_hash -> TrainState
+
+
     DataFile<Train> TrainsData; // TrainIndex -> Train
     DataFile<Seats> SeatsData;  // SeatIndex -> Seats
     BPlusTree<pair<stationName_t, int>, pair<int, int>> StationMap;  // stationName -> (TrainIndex, SeatsIndex)
@@ -37,7 +41,8 @@ class TrainSystem {
     // [N] add_train -i -n -m -s -p -x -t -o -d -y
     bool add_train(const char *_i, const char *_n, const char *_m, const char *_s, const char *_p, const char *_x,
                    const char *_t, const char *_o, const char *_d, const char *_y) {
-        if (TrainsStates.find(_i).second) return 0;
+        size_t hash_i = string_hash(_i);
+        if (TrainsStates.find(hash_i).second) return 0;
         std::memset(&tmpTrain, 0, sizeof(tmpTrain));
         tmpTrain.trainID = _i;
         tmpTrain.stationNum = atoi(_n);
@@ -58,22 +63,24 @@ class TrainSystem {
         tmpTrainState.seatIndex = -1;
         tmpTrainState.state = 0;
         tmpTrainState.trainIndex = TrainsData.write(tmpTrain);
-        TrainsStates.insert(_i, tmpTrainState);
+        TrainsStates.insert(hash_i, tmpTrainState);
         return 1;
     }
 
     // [N] delete_train -i
     bool delete_train(const char *_i) {
-        auto tmp = TrainsStates.find(_i);
+        size_t hash_i = string_hash(_i);
+        auto tmp = TrainsStates.find(hash_i);
         if (tmp.second == false) return 0;
         if (tmp.first.isReleased()) return 0;
-        TrainsStates.remove(_i);
+        TrainsStates.remove(hash_i);
         return 1;
     }
 
     // [N] release_train -i
     bool release_train(const char *_i) {
-        auto tmp = TrainsStates.find(_i);
+        size_t hash_i = string_hash(_i);
+        auto tmp = TrainsStates.find(hash_i);
         if (tmp.second == false) return 0;
         if (tmp.first.isReleased()) return 0;
         TrainsData.read(tmpTrain, tmp.first.trainIndex);
@@ -84,7 +91,7 @@ class TrainSystem {
             }
         }
         tmp.first.seatIndex = SeatsData.write(tmpSeats);
-        TrainsStates.modify(_i, tmp.first);
+        TrainsStates.modify(hash_i, tmp.first);
         // Puting the train into the StationMap
         for (int i = 0; i < tmpTrain.stationNum; ++i) {
             StationMap.insert(pair(tmpTrain.stations[i], tmp.first.trainIndex), pair(tmp.first.trainIndex, tmp.first.seatIndex));
@@ -95,7 +102,8 @@ class TrainSystem {
 
     // [N] query_train -i -d
     std::tuple<Train *, int *, datetime_t> query_train(const char *_i, const char *_d) {
-        auto tmp = TrainsStates.find(_i);
+        size_t hash_i = string_hash(_i);
+        auto tmp = TrainsStates.find(hash_i);
         if (tmp.second == false) {
             CERR("train %s not exist\n", _i);
             return std::make_tuple(nullptr, nullptr, 0);
@@ -250,7 +258,8 @@ class TrainSystem {
     // buy_ticket -u -i -d -n -f -t     (return an order, )
     pair<Order *, int> buy_ticket(const char *_u, const char *_i, const char *_d, const char *_n, const char *_f,
                                   const char *_t, const char *_q) {
-        auto tmp = TrainsStates.find(_i);
+        size_t hash_i = string_hash(_i);
+        auto tmp = TrainsStates.find(hash_i);
         if (tmp.second == false) {
             CERR("train %s not exist\n", _i);
             return {nullptr, 0};
@@ -319,7 +328,7 @@ class TrainSystem {
 
     bool refund_ticket(int orderIndex) {
         OrdersData.read(tmpOrder, orderIndex);
-        auto tmp = TrainsStates.find(tmpOrder.trainID).first;
+        auto tmp = TrainsStates.find(string_hash(tmpOrder.trainID)).first;
         TrainsData.read(tmpTrain, tmp.trainIndex);
         SeatsData.read(tmpSeats, tmp.seatIndex);
         if (tmpOrder.isRefunded()) {
@@ -337,11 +346,10 @@ class TrainSystem {
             }
             tmpOrder.state = 2;
             OrdersData.update(tmpOrder, orderIndex);
-
             // check if there are any pending orders
-
             vector<int> indexs;
-            TrainUnitMap.search(pair(TrainUnit{tmp.trainIndex, train_dep}, 0), pair(TrainUnit{tmp.trainIndex, train_dep}, 0x3f3f3f3f), indexs);
+            TrainUnitMap.search(pair(TrainUnit{tmp.trainIndex, train_dep}, 0), pair(TrainUnit{tmp.trainIndex, train_dep},
+                                0x3f3f3f3f), indexs);
             for (auto idx : indexs) {
                 OrdersData.read(tmpOrder, idx);
                 if (tmpOrder.isPending()) {
@@ -362,7 +370,6 @@ class TrainSystem {
                     throw;
                 }
             }
-
             SeatsData.update(tmpSeats, tmp.seatIndex);
         }
         return 1;

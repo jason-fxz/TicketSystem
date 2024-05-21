@@ -13,8 +13,12 @@ struct User {
     name_t      name;  ///< name
     mailAddr_t  mail;  ///< mail address
     privilege_t priv;  ///< privilege
+    
+
 
     User() = default;
+
+
 
     User(const username_t &user, const password_t &pass, const name_t &name, const mailAddr_t &mail, privilege_t priv)
         : user(user), pass(pass), name(name), mail(mail), priv(priv) {}
