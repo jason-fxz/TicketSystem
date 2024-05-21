@@ -21,7 +21,7 @@ class TrainSystem {
 
     DataFile<Train> TrainsData; // TrainIndex -> Train
     DataFile<Seats> SeatsData;  // SeatIndex -> Seats
-    BPlusTree<pair<stationName_t, int>, pair<int, int>> StationMap;  // stationName -> (TrainIndex, SeatsIndex)
+    BPlusTree<pair<size_t, int>, pair<int, int>> StationMap;  // stationName_hash -> (TrainIndex, SeatsIndex)
     BPlusTree<pair<TrainUnit, int>, int> TrainUnitMap; // TrainUnit -> OrderIndex
     DataFile<Order, sizeof(Order)> OrdersData; // OrderIndex -> Order
 
@@ -94,7 +94,7 @@ class TrainSystem {
         TrainsStates.modify(hash_i, tmp.first);
         // Puting the train into the StationMap
         for (int i = 0; i < tmpTrain.stationNum; ++i) {
-            StationMap.insert(pair(tmpTrain.stations[i], tmp.first.trainIndex), pair(tmp.first.trainIndex, tmp.first.seatIndex));
+            StationMap.insert(pair(string_hash(tmpTrain.stations[i]), tmp.first.trainIndex), pair(tmp.first.trainIndex, tmp.first.seatIndex));
         }
         // TODO : release train !!! OKOKOKOKOK
         return 1;
@@ -131,7 +131,9 @@ class TrainSystem {
         vector<TrainPreview> res;
         datetime_t departingDate = datetime_t(_d, 1) + datetime_t("23:59", 2);
         vector<pair<int, int>> indexs;
-        StationMap.search(pair(_s, 0), pair(_s, 0x3f3f3f3f), indexs);
+        auto hash_s = string_hash(_s);
+        auto hash_t = string_hash(_t);
+        StationMap.search(pair(hash_s, 0), pair(hash_s, 0x3f3f3f3f), indexs);
         for (auto index : indexs) {
             TrainsData.read(tmpTrain, index.first);
             SeatsData.read(tmpSeats, index.second);
@@ -178,7 +180,8 @@ class TrainSystem {
         Transfer tttt;
         tttt.from = _s;
         tttt.to = _t;
-        StationMap.search(pair(_s, 0), pair(_s, 0x3f3f3f3f), indexs);
+        auto hash_s = string_hash(_s);
+        StationMap.search(pair(hash_s, 0), pair(hash_s, 0x3f3f3f3f), indexs);
         for (auto index : indexs) {
             TrainsData.read(tmpTrain, index.first);
             SeatsData.read(tmpSeats, index.second);
@@ -200,7 +203,8 @@ class TrainSystem {
                 }
                 tttt.mid = tmpTrain.stations[i];
                 indexs2.clear();
-                StationMap.search(pair(tmpTrain.stations[i], 0), pair(tmpTrain.stations[i], 0x3f3f3f3f), indexs2);
+                auto hash_m = string_hash(tmpTrain.stations[i]);
+                StationMap.search(pair(hash_m, 0), pair(hash_m, 0x3f3f3f3f), indexs2);
                 for (auto index2 : indexs2) {
                     TrainsData.read(tmpTrain2, index2.first);
                     SeatsData.read(tmpSeats2, index2.second);
