@@ -183,9 +183,9 @@ class File {
      * @param index The index of the object.
      */
     template<typename T>
-    void update(T &t, const int index) {
-        file.seekp(index * BLOCK_SIZE);
-        file.write(reinterpret_cast<const char *>(&t), sizeof(T));
+    void update(T &t, const int index, size_t offset = 0, size_t size = sizeof(T)) {
+        file.seekp(index * BLOCK_SIZE + offset);
+        file.write(reinterpret_cast<const char *>(&t) + offset, size);
     }
 
     /**
@@ -198,9 +198,9 @@ class File {
      * @param index The index of the object.
      */
     template<typename T>
-    void read(T &t, const int index) {
-        file.seekg(index * BLOCK_SIZE);
-        file.read(reinterpret_cast<char *>(&t), sizeof(T));
+    void read(T &t, const int index, size_t offset = 0, size_t size = sizeof(T)) {
+        file.seekg(index * BLOCK_SIZE + offset);
+        file.read(reinterpret_cast<char *>(&t) + offset, size);
     }
 
 };
@@ -219,11 +219,11 @@ class DataFile : public File<0, BLOCK_SIZE> {
     }
     ~DataFile() {
     }
-    void read(Tp &t, const int index) {
-        FILE::read(t, index);
+    void read(Tp &t, const int index, size_t offset = 0, size_t size = sizeof(Tp)) {
+        FILE::read(t, index, offset, size);
     }
-    void update(Tp &t, const int index) {
-        FILE::update(t, index);
+    void update(Tp &t, const int index, size_t offset = 0, size_t size = sizeof(Tp)) {
+        FILE::update(t, index, offset, size);
     }
     int write(const Tp &t) {
         return FILE::write(t);

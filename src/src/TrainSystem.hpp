@@ -8,6 +8,7 @@
 #include "File.hpp"
 #include "BPlusTree.hpp"
 #include "Vector.hpp"
+#include <cassert>
 #include <iterator>
 #include <tuple>
 
@@ -29,6 +30,13 @@ class TrainSystem {
     Seats tmpSeats;
     Transfer tmpTransfer;
     Order tmpOrder;
+
+    void readSeats(Seats &seats, int seatIndex, int date) {
+        SeatsData.read(seats, seatIndex, date * sizeof(seatinfo_t), sizeof(seatinfo_t));
+    }
+    void writeSeats(Seats &seats, int seatIndex, int date) {
+        SeatsData.update(seats, seatIndex, date * sizeof(seatinfo_t), sizeof(seatinfo_t));
+    }
 
   public:
     TrainSystem() : TrainsStates("TrainsState"), SeatsData("SeatsData"),
@@ -116,7 +124,7 @@ class TrainSystem {
             return std::make_tuple(nullptr, nullptr, 0);
         }
         if (tmp.first.isReleased()) {
-            SeatsData.read(tmpSeats, tmp.first.seatIndex);
+            readSeats(tmpSeats, tmp.first.seatIndex, departingDate.getDDate());
         } else {
             for (int j = 0; j < tmpTrain.stationNum - 1; ++j) {
                 tmpSeats.count[departingDate.getDDate()][j] = tmpTrain.seatNum;
@@ -136,7 +144,6 @@ class TrainSystem {
         StationMap.search(pair(hash_s, 0), pair(hash_s, 0x3f3f3f3f), indexs);
         for (auto index : indexs) {
             TrainsData.read(tmpTrain, index.first);
-            SeatsData.read(tmpSeats, index.second);
             pair<int, int> stationIndex = tmpTrain.GetStationIndex(_s, _t);
             if (stationIndex.first == -1 || stationIndex.second == -1 || stationIndex.first > stationIndex.second) continue;
             datetime_t train_dep = (departingDate - tmpTrain.leavingTimes[stationIndex.first]);
@@ -150,6 +157,7 @@ class TrainSystem {
             tmp.leavingTime = train_dep + tmpTrain.leavingTimes[stationIndex.first];
             tmp.arrivingTime = train_dep + tmpTrain.arrivingTimes[stationIndex.second];
             tmp.price = tmpTrain.prices[stationIndex.second] - tmpTrain.prices[stationIndex.first];
+            readSeats(tmpSeats, index.second, train_dep.getDDate());
             tmp.seatCount = 0x3f3f3f3f;
             for (int i = stationIndex.first; i < stationIndex.second; ++i) {
                 tmp.seatCount = std::min(tmp.seatCount, tmpSeats.count[train_dep.getDDate()][i]);
@@ -184,7 +192,6 @@ class TrainSystem {
         StationMap.search(pair(hash_s, 0), pair(hash_s, 0x3f3f3f3f), indexs);
         for (auto index : indexs) {
             TrainsData.read(tmpTrain, index.first);
-            SeatsData.read(tmpSeats, index.second);
             int begIndex = tmpTrain.GetStationIndex(_s);
             if (begIndex == -1) continue;
             datetime_t train1_dep = (departingDate - tmpTrain.leavingTimes[begIndex]);
@@ -197,6 +204,8 @@ class TrainSystem {
                 tttt.arrivingTime1 = train1_dep + tmpTrain.arrivingTimes[i];
                 // CERR("tttt.arrivingTime1 = %s\n", tttt.arrivingTime1.toString().c_str());
                 tttt.price1 = tmpTrain.prices[i] - tmpTrain.prices[begIndex];
+
+                readSeats(tmpSeats, index.second, train1_dep.getDDate());
                 tttt.seatCount1 = 0x3f3f3f3f;
                 for (int j = begIndex; j < i; ++j) {
                     tttt.seatCount1 = std::min(tttt.seatCount1, tmpSeats.count[train1_dep.getDDate()][j]);
@@ -207,7 +216,6 @@ class TrainSystem {
                 StationMap.search(pair(hash_m, 0), pair(hash_m, 0x3f3f3f3f), indexs2);
                 for (auto index2 : indexs2) {
                     TrainsData.read(tmpTrain2, index2.first);
-                    SeatsData.read(tmpSeats2, index2.second);
                     pair<int, int> stationIndex = tmpTrain2.GetStationIndex(tmpTrain.stations[i], _t);
                     if (stationIndex.first == -1 || stationIndex.second == -1 || stationIndex.first > stationIndex.second) continue;
                     if (tmpTrain2.trainID == tmpTrain.trainID) continue;
@@ -228,6 +236,7 @@ class TrainSystem {
                     tttt.leavingTime2 = train2_dep + tmpTrain2.leavingTimes[stationIndex.first];
                     tttt.arrivingTime2 = train2_dep + tmpTrain2.arrivingTimes[stationIndex.second];
                     tttt.price2 = tmpTrain2.prices[stationIndex.second] - tmpTrain2.prices[stationIndex.first];
+                    readSeats(tmpSeats2, index2.second, train2_dep.getDDate());
                     tttt.seatCount2 = 0x3f3f3f3f;
                     for (int j = stationIndex.first; j < stationIndex.second; ++j) {
                         tttt.seatCount2 = std::min(tttt.seatCount2, tmpSeats2.count[train2_dep.getDDate()][j]);
@@ -273,7 +282,6 @@ class TrainSystem {
             return {nullptr, 0};
         }
         TrainsData.read(tmpTrain, tmp.first.trainIndex);
-        SeatsData.read(tmpSeats, tmp.first.seatIndex);
         if (tmpTrain.seatNum < atoi(_n)) {
             CERR("train %s Not enough seatsc (ps: seatNum < Num)\n", _i);
             return {nullptr, 0};
@@ -299,6 +307,7 @@ class TrainSystem {
         tmpOrder.user = _u;
         tmpOrder.leavingTime = tmpTrain.leavingTimes[stationIndex.first];
         tmpOrder.arrivingTime = tmpTrain.arrivingTimes[stationIndex.second];
+        readSeats(tmpSeats, tmp.first.seatIndex, train_dep.getDDate());
         int seatCount = 0x3f3f3f3f;
         for (int i = stationIndex.first; i < stationIndex.second; ++i) {
             seatCount = std::min(seatCount, tmpSeats.count[train_dep.getDDate()][i]);
@@ -308,7 +317,7 @@ class TrainSystem {
             for (int i = stationIndex.first; i < stationIndex.second; ++i) {
                 tmpSeats.count[train_dep.getDDate()][i] -= tmpOrder.num;
             }
-            SeatsData.update(tmpSeats, tmp.first.seatIndex);
+            writeSeats(tmpSeats, tmp.first.seatIndex, train_dep.getDDate());
         } else { // not enough seats
             if (_q == nullptr || _q[0] == 'f') {
                 CERR("train %s Not enough seats And user don't queue\n", _i);
@@ -333,8 +342,6 @@ class TrainSystem {
     bool refund_ticket(int orderIndex) {
         OrdersData.read(tmpOrder, orderIndex);
         auto tmp = TrainsStates.find(string_hash(tmpOrder.trainID)).first;
-        TrainsData.read(tmpTrain, tmp.trainIndex);
-        SeatsData.read(tmpSeats, tmp.seatIndex);
         if (tmpOrder.isRefunded()) {
             CERR("Order has been refunded\n");
             return 0;
@@ -343,8 +350,10 @@ class TrainSystem {
             tmpOrder.state = 2;
             OrdersData.update(tmpOrder, orderIndex);
         } else {
+            TrainsData.read(tmpTrain, tmp.trainIndex);
             pair<int, int> stationIndex = tmpTrain.GetStationIndex(tmpOrder.from, tmpOrder.to);
             datetime_t train_dep = tmpOrder.date;
+            readSeats(tmpSeats, tmp.seatIndex, train_dep.getDDate());
             for (int i = stationIndex.first; i < stationIndex.second; ++i) {
                 tmpSeats.count[train_dep.getDDate()][i] += tmpOrder.num;
             }
@@ -374,7 +383,7 @@ class TrainSystem {
                     throw;
                 }
             }
-            SeatsData.update(tmpSeats, tmp.seatIndex);
+            writeSeats(tmpSeats, tmp.seatIndex, train_dep.getDDate());
         }
         return 1;
     }
