@@ -242,6 +242,7 @@ class VectorFile : public vector<Tp> {
     std::fstream file;
   public:
     VectorFile(std::string path) {
+        path += ".vec";
         file.open(path, std::ios::in | std::ios::out | std::ios::binary);
         if (!file.good()) {
             file.close();
@@ -275,6 +276,7 @@ class HashMapFile : public Hashmap<Key, Tp, MOD> {
     typedef Hashmap<Key, Tp, MOD> HashMap;
     typedef pair<Key, Tp> Data_t;
     HashMapFile(std::string path) {
+        path += ".map";
         file.open(path, std::ios::in | std::ios::out | std::ios::binary);
         if (!file.good()) {
             file.close();

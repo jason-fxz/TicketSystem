@@ -108,6 +108,9 @@ class vector {
         T &operator*() const {
             return *_m_ptr;
         }
+        T *operator->() const {
+            return _m_ptr;
+        }
         /**
          * a operator to check whether two iterators are same (pointing to the same memory address).
          */
@@ -199,6 +202,9 @@ class vector {
 
         const T &operator*() const {
             return *_m_cptr;
+        }
+        const T *operator->() const {
+            return _m_cptr;
         }
         /**
          * a operator to check whether two iterators are same (pointing to the same memory address).

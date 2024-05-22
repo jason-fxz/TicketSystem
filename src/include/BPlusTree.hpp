@@ -168,6 +168,7 @@ class BPlusTree {
     }
 
     void clear_cache() {
+        cache_map.clear();
     }
 
     BPlusTree(std::string data_file_name) : data_file(data_file_name + ".db") {

@@ -3,13 +3,37 @@
 
 #include "File.hpp"
 #include "User.hpp"
+#include "utility.hpp"
 #include "utils.hpp"
 #include "UserSystem.hpp"
 #include "TrainSystem.hpp"
 
+#include <chrono>
+#include <iomanip>
+
+
 namespace sjtu {
 
 class TicketSystem : command_helper, TrainSystem, UserSystem {
+
+    Timer query_profile_timer;
+    Timer buy_ticket_timer;
+    Timer query_ticket_timer;
+    Timer modify_profile_timer;
+    Timer query_order_timer;
+    Timer query_train_timer;
+    Timer query_transfer_timer;
+    Timer refund_ticket_timer;
+    Timer tot_timer;
+  public:
+    TicketSystem() : query_profile_timer("query_profile"), buy_ticket_timer("buy_ticket"),
+        query_ticket_timer("query_ticket"), tot_timer("tot"), query_order_timer("query_order"), 
+        modify_profile_timer("modify_profile"),query_train_timer("query_train"), query_transfer_timer("query_transfer"),
+        refund_ticket_timer("refund_ticket") {}
+    ~TicketSystem() {}
+
+  private:
+
     void add_user() {
         if (UserSystem::add_user(arg('c'), arg('u'), arg('p'), arg('n'), arg('m'), arg('g'))) {
             puts("0");
@@ -35,21 +59,25 @@ class TicketSystem : command_helper, TrainSystem, UserSystem {
     }
 
     void query_profile() {
+        query_profile_timer.start();
         auto tmp = UserSystem::query_profile(arg('c'), arg('u'));
         if (tmp == nullptr) {
             puts("-1");
         } else {
             printf("%s %s %s %d\n", tmp->user.c_str(), tmp->name.c_str(), tmp->mail.c_str(), int(tmp->priv));
         }
+        query_profile_timer.stop();
     }
 
     void modify_profile() {
+        modify_profile_timer.start();
         auto tmp = UserSystem::modify_profile(arg('c'), arg('u'), arg('p'), arg('n'), arg('m'), arg('g'));
         if (tmp == nullptr) {
             puts("-1");
         } else {
             printf("%s %s %s %d\n", tmp->user.c_str(), tmp->name.c_str(), tmp->mail.c_str(), int(tmp->priv));
         }
+        modify_profile_timer.stop();
     }
 
     void add_train() {
@@ -78,6 +106,7 @@ class TicketSystem : command_helper, TrainSystem, UserSystem {
     }
 
     void query_train() {
+        query_train_timer.start();
         auto tmp = TrainSystem::query_train(arg('i'), arg('d'));
         if (std::get<0>(tmp) == nullptr) {
             puts("-1");
@@ -98,22 +127,26 @@ class TicketSystem : command_helper, TrainSystem, UserSystem {
                 }
             }
         }
+        query_train_timer.stop();
     }
 
     vector<TrainPreview> res;
     void query_ticket() {
+        query_ticket_timer.start();
         res.clear();
         res.reserve(1145);
         TrainSystem::query_ticket(res, arg('s'), arg('t'), arg('d'), arg('p'));
         printf("%d\n", (int)res.size());
         for (int i = 0; i < res.size(); ++i) {
-            printf("%s %s %s -> %s %s %d %d\n", res[i].trainID.c_str(), res[i].from.c_str(), res[i].leavingTime.toString().c_str(),
-                   res[i].to.c_str(),
+            printf("%s %s %s -> %s %s %d %d\n", res[i].trainID.c_str(), arg('s'), res[i].leavingTime.toString().c_str(),
+                   arg('t'),
                    res[i].arrivingTime.toString().c_str(), res[i].price, res[i].seatCount);
         }
+        query_ticket_timer.stop();
     }
 
     void query_transfer() {
+        query_transfer_timer.start();
         auto tmp = TrainSystem::query_transfer(arg('s'), arg('t'), arg('d'), arg('p'));
         if (tmp == nullptr) puts("0");
         else {
@@ -124,9 +157,11 @@ class TicketSystem : command_helper, TrainSystem, UserSystem {
                    tmp->to.c_str(),
                    tmp->arrivingTime2.toString().c_str(), tmp->price2, tmp->seatCount2);
         }
+        query_transfer_timer.stop();
     }
 
     void buy_ticket() { // -u -i -d -n -f -t (-q false)
+        buy_ticket_timer.start();
         if (UserSystem::isLogin(arg('u')) == false) {
             puts("-1");
             return;
@@ -142,10 +177,12 @@ class TicketSystem : command_helper, TrainSystem, UserSystem {
         } else {
             printf("%lld\n", tmp.first->totcost());
         }
+        buy_ticket_timer.stop();
     }
 
 
     void query_order() {
+        query_order_timer.start();
         vector<int> OrderIndex;
         if (!UserSystem::query_order(OrderIndex, arg('u'))) {
             puts("-1");
@@ -160,9 +197,11 @@ class TicketSystem : command_helper, TrainSystem, UserSystem {
                    o.from.c_str(), o.getLeavingDatetime().toString().c_str(),
                    o.to.c_str(), o.getArrivingDatetime().toString().c_str(), o.price, o.num);
         }
+        query_order_timer.stop();
     }
 
     void refund_ticket() {
+        refund_ticket_timer.start();
         int tmp = UserSystem::refund_ticket(arg('u'), arg('n'));
         if (tmp == -1) {
             puts("-1");
@@ -174,11 +213,14 @@ class TicketSystem : command_helper, TrainSystem, UserSystem {
                 puts("-1");
             }
         }
+        refund_ticket_timer.stop();
     }
 
 
   public:
     int NextCMD() {
+        tot_timer.start();
+        int ret = 0;
         command_helper::process();
         switch (command_helper::getCMD()) {
         case CMD::AU: add_user(); break;
@@ -195,11 +237,12 @@ class TicketSystem : command_helper, TrainSystem, UserSystem {
         case CMD::BT: buy_ticket(); break;
         case CMD::QO: query_order(); break;
         case CMD::RI: refund_ticket(); break;
-        case CMD::EX: puts("bye"); return 1;
-        case CMD::CL: puts("0"); return 2;
+        case CMD::EX: puts("bye"); ret = 1; break;
+        case CMD::CL: puts("0"); ret = 2; break;
         default: throw "WTF CMD?";
         }
-        return 0;
+        tot_timer.stop();
+        return ret;
     }
 
 

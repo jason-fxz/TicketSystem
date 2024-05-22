@@ -62,12 +62,28 @@ static_assert(sizeof(TrainState), "");
 
 struct TrainPreview {
     trainID_t trainID;
-    stationName_t from;
-    stationName_t to;
+    // stationName_t from;
+    // stationName_t to;
+    // int trainIndex;
     datetime_t leavingTime;
     datetime_t arrivingTime;
     price_t price;
     number_t seatCount;
+};
+
+struct TrainLite {
+    int trainIndex;
+    int seatIndex;
+    price_t price; // prefix sum of prices to the station
+    int leavingTimes;
+    int arrivingTimes;
+    char salebegDD;
+    char saleendDD;
+    char pos; // 0 ~ stationNum - 1
+    bool checkdate(datetime_t date) {
+        return salebegDD <= date.getDDate() && date.getDDate() <= saleendDD;
+    
+    }
 };
 
 struct Transfer {

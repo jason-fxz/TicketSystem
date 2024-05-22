@@ -17,6 +17,8 @@ namespace sjtu {
 
 
 
+
+
 typedef String<21> username_t;
 typedef String<31> password_t;
 typedef String<16> name_t;

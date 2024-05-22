@@ -237,9 +237,7 @@ class LRUHashmap {
      */
     LRUHashmap() {
         m_size = 0;
-        for (size_t i = 0; i < MOD; ++i) {
-            m_data[i] = nullptr;
-        }
+        memset(m_data, 0, sizeof(m_data));
         m_list_head = m_list_tail = new node{data_t{}, nullptr, nullptr, nullptr};
     }
 
@@ -256,13 +254,12 @@ class LRUHashmap {
      */
     void clear() {
         m_size = 0;
-        for (size_t i = 0; i < MOD; ++i) {
-            while (m_data[i]) {
-                node *tmp = m_data[i];
-                m_data[i] = m_data[i]->next;
-                delete tmp;
-            }
+        while (m_list_head != m_list_tail) {
+            node *tmp = m_list_head;
+            m_list_head = m_list_head->list_next;
+            delete tmp;
         }
+        memset(m_data, 0, sizeof(m_data));
         m_list_head = m_list_tail;
     }
 
